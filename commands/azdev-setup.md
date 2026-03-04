@@ -1,5 +1,5 @@
 ---
-name: gsd:azdev-setup
+name: azdev-setup
 description: Configure Azure DevOps connection credentials
 argument-hint: ""
 allowed-tools:
@@ -18,30 +18,30 @@ On re-run with existing config, show current values (PAT masked) and let user ch
 
 <execution_context>
 Config file: .planning/azdev-config.json
-Helper: ~/.claude/get-shit-done/bin/azdev-tools.cjs
+Helper: ~/.claude/bin/azdev-tools.cjs
 </execution_context>
 
 <context>
 $CWD is the project directory where .planning/ lives.
 
 azdev-tools.cjs CLI contract:
-  node ~/.claude/get-shit-done/bin/azdev-tools.cjs load-config --cwd $CWD
+  node ~/.claude/bin/azdev-tools.cjs load-config --cwd $CWD
     -> stdout: JSON {"org":"...","project":"...","pat":"<raw-decoded>"}
     -> exit 0 on success, exit 1 if no config
 
-  node ~/.claude/get-shit-done/bin/azdev-tools.cjs save-config --org "<org>" --project "<project>" --pat "<pat>" --cwd $CWD
+  node ~/.claude/bin/azdev-tools.cjs save-config --org "<org>" --project "<project>" --pat "<pat>" --cwd $CWD
     -> Normalizes org (strips URL prefix), base64-encodes PAT
     -> stdout: JSON {"status":"saved","org":"...","project":"..."}
     -> exit 0 on success, exit 1 on error
 
-  node ~/.claude/get-shit-done/bin/azdev-tools.cjs test --cwd $CWD
+  node ~/.claude/bin/azdev-tools.cjs test --cwd $CWD
     -> Success: stdout "Connected to {org}/{project}", exit 0
     -> Failure: stderr error message with fix suggestion, exit 1
 </context>
 
 <process>
 1. **Check for existing config:**
-   Run `node ~/.claude/get-shit-done/bin/azdev-tools.cjs load-config --cwd $CWD`
+   Run `node ~/.claude/bin/azdev-tools.cjs load-config --cwd $CWD`
    - If exit 0 (config found): go to step 2
    - If exit 1 (no config): go to step 3
 
@@ -66,7 +66,7 @@ azdev-tools.cjs CLI contract:
    IMPORTANT: Treat this value as sensitive. Do not echo it back in plain text or log it anywhere.
 
 6. **Save credentials:**
-   Run `node ~/.claude/get-shit-done/bin/azdev-tools.cjs save-config --org "<org>" --project "<project>" --pat "<pat>" --cwd $CWD`
+   Run `node ~/.claude/bin/azdev-tools.cjs save-config --org "<org>" --project "<project>" --pat "<pat>" --cwd $CWD`
    - If exit 0: credentials saved. Continue to step 7.
    - If exit 1: display the error from stderr. Stop and tell user to try again.
 
@@ -77,7 +77,7 @@ azdev-tools.cjs CLI contract:
    - If already covered: no change needed.
 
 7. **Auto-run connection test:**
-   Run `node ~/.claude/get-shit-done/bin/azdev-tools.cjs test --cwd $CWD`
+   Run `node ~/.claude/bin/azdev-tools.cjs test --cwd $CWD`
    - If exit 0: Show the success message from stdout to the user (e.g., "Connected to myorg/MyProject").
    - If exit 1: Show the error message from stderr to the user. Tell user: "Run `/azdev-setup` again to reconfigure credentials."
 </process>

@@ -10,13 +10,12 @@ The pipeline:
 
 1. **Connect** — Configure your Azure DevOps org, project, and Personal Access Token
 2. **View sprint** — Fetch the current sprint backlog with stories, tasks, descriptions, and acceptance criteria
-3. **Analyze** — Select stories, resolve their target repos via branch links, and generate project plans (PROJECT.md + ROADMAP.md) in each repo
-4. **Execute** — Work through the plans using standard GSD workflows. Work item status updates (New → Active → Resolved) happen automatically at execution boundaries
+3. **Analyze** — Run `/azdev` to analyze stories, verify understanding with the user, update descriptions in Azure DevOps, and generate project plans (PROJECT.md + ROADMAP.md + REQUIREMENTS.md) in each target repo
+4. **Execute** — Navigate to target repos and implement. Task status updates (New → Active → Resolved) are tracked via `azdev-task-map.json`
 
 ## Prerequisites
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI installed
-- [GSD (Get Shit Done)](https://github.com/cnjames/get-shit-done) workflow framework installed in Claude Code
 - Node.js (no external dependencies — uses built-in modules only)
 - An Azure DevOps Personal Access Token with these scopes:
   - `vso.project` — read project/iteration data
@@ -31,15 +30,16 @@ The pipeline:
 Copy the skill files to your Claude Code commands directory:
 
 ```bash
-cp commands/azdev-*.md ~/.claude/commands/
+cp commands/azdev*.md ~/.claude/commands/
 ```
 
 ### 2. Copy helper script
 
-Copy the Node.js helper script to GSD's bin directory:
+Copy the Node.js helper script to Claude Code's bin directory:
 
 ```bash
-cp bin/azdev-tools.cjs ~/.claude/get-shit-done/bin/
+mkdir -p ~/.claude/bin
+cp bin/azdev-tools.cjs ~/.claude/bin/
 ```
 
 ### 3. Configure credentials
@@ -85,29 +85,27 @@ Fetches and displays the current sprint backlog. Shows:
 
 Supports `--me` flag to filter to your assigned items only.
 
-### `/azdev-analyze`
+### `/azdev`
 
 The main pipeline command. It:
 
 1. Fetches your assigned stories from the current sprint
 2. Resolves branch links on each story to find the target repository
 3. Shows a summary: "You have N stories across M repos"
-4. For each story, presents the details for your review and verification
-5. Generates PROJECT.md, ROADMAP.md, and REQUIREMENTS.md in each target repo
-6. Writes `.planning/azdev-task-map.json` — maps DevOps work item IDs to GSD projects
+4. For each story, presents its analysis for your review and verification
+5. Updates story descriptions in Azure DevOps with the verified analysis
+6. Generates PROJECT.md, ROADMAP.md, and REQUIREMENTS.md in each target repo
+7. Writes `.planning/azdev-task-map.json` — maps DevOps work item IDs to repos for status tracking
 
-After approval, you switch to the target repo and use standard GSD commands (`/gsd:plan-phase`, `/gsd:execute-phase`) to do the actual work.
+## Status tracking
 
-## Automatic status updates
+The `azdev-task-map.json` file maps Azure DevOps task IDs to local repos. During execution, use `azdev-tools.cjs update-state` to transition tasks:
 
-When `/gsd:execute-phase` runs in a repo that has an `azdev-task-map.json` file:
+- **Start work** → set tasks to **Active**
+- **Complete work** → set tasks to **Resolved**
+- **Check story** → use `get-child-states` to verify all children are done before resolving the story
 
-- **Execution starts** → mapped tasks and their parent story are set to **Active**
-- **Execution completes** → mapped tasks are set to **Resolved**
-- **Story resolution** → before resolving the story, all child task states are checked. The story is only resolved when ALL children (including non-code tasks you resolve manually) are done
-- **Partial completion** → if non-code tasks remain open, you get a notification listing them. The story stays Active
-
-Status updates are non-blocking side effects — if an API call fails, execution continues normally.
+Status updates use the Azure DevOps REST API and require the `vso.work_write` PAT scope.
 
 ## Helper script CLI
 
@@ -148,8 +146,8 @@ claude-azdev-skill/
 │   ├── azdev-setup.md            # /azdev-setup — credential configuration
 │   ├── azdev-test.md             # /azdev-test — connection verification
 │   ├── azdev-sprint.md           # /azdev-sprint — sprint backlog display
-│   └── azdev-analyze.md          # /azdev-analyze — story analysis pipeline
-└── .planning/                    # GSD project planning docs (development artifacts)
+│   └── azdev.md                  # /azdev — story analysis & project bootstrap pipeline
+└── README.md
 ```
 
 ## How it works
@@ -166,28 +164,28 @@ claude-azdev-skill/
 Azure DevOps Sprint
         │
         ▼
-  /azdev-analyze
+    /azdev
         │
         ├── Fetch stories (get-sprint-items --me)
         ├── Resolve repos (get-branch-links per story)
-        ├── User verifies understanding
-        ├── Generate PROJECT.md + ROADMAP.md per repo
+        ├── User verifies understanding per story
+        ├── Update story descriptions in Azure DevOps
+        ├── Generate PROJECT.md + ROADMAP.md + REQUIREMENTS.md per repo
         └── Write azdev-task-map.json
                 │
                 ▼
         Target Repo
                 │
-                ├── /gsd:plan-phase → create plans
-                ├── /gsd:execute-phase → execute + auto-update DevOps status
-                │       ├── Start: tasks → Active
-                │       └── End: tasks → Resolved, story → Resolved (if all children done)
+                ├── Implement changes
+                ├── update-state: tasks → Active
+                ├── update-state: tasks → Resolved
                 └── Done
 ```
 
 ## Security
 
 - PAT is stored base64-encoded in `.planning/azdev-config.json` — this is light obfuscation, not encryption
-- Always add `azdev-config.json` to `.gitignore` — the setup command does not do this automatically
+- Always add `azdev-config.json` to `.gitignore` — the setup command checks for this
 - The PAT never leaves your local machine except in API calls to your Azure DevOps instance
 - No external dependencies — the helper script uses only Node.js built-in modules (`https`, `fs`, `path`, `url`)
 
