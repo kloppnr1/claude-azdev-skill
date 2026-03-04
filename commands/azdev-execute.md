@@ -14,7 +14,7 @@ allowed-tools:
 ---
 
 <objective>
-Execute the project plan for one or more analyzed stories. For each story: navigate to the target repo, set tasks to Active in Azure DevOps, work through the ROADMAP.md phases using PROJECT.md and REQUIREMENTS.md as guidance, and mark tasks Resolved when complete. Optionally resolve the parent story when all child tasks are done.
+Execute the project plan for one or more analyzed stories. For each story: create a feature branch, navigate to the target repo, set tasks to Active in Azure DevOps, work through the ROADMAP.md phases using PROJECT.md and REQUIREMENTS.md as guidance, auto-resolve tasks and story when complete, and create a PR to develop.
 </objective>
 
 <execution_context>
@@ -99,35 +99,27 @@ Store the selected mapping as `current`.
 3. Read `{current.repoPath}/.planning/REQUIREMENTS.md` using the Read tool.
    If missing: warn user but continue.
 
-**Step 4 — Present execution plan and confirm:**
+**Step 4 — Create feature branch:**
 
-Display:
-```
-=== Execute: #{current.storyId} — {current.storyTitle} ===
+1. Navigate to `{current.repoPath}`.
+2. Ensure working tree is clean: run `git status --porcelain`. If there are uncommitted changes, warn the user and ask how to proceed.
+3. Fetch latest from remote: `git fetch origin develop`.
+4. Create and checkout a feature branch from develop:
+   - Branch name: `feature/{storyId}-{slugified-storyTitle}` (lowercase, spaces→hyphens, max 60 chars for the slug part).
+   - Example: `feature/12345-add-user-registration`
+   - Run: `git checkout -b feature/{branchName} origin/develop`
+5. If the branch already exists locally (e.g., resuming work), just check it out: `git checkout feature/{branchName}`.
 
-Repo: {current.repoPath}
-Tasks ({count}):
-  #{taskId} -- {taskTitle}
-  #{taskId} -- {taskTitle}
-
-This will:
-  1. Set all tasks to "Active" in Azure DevOps
-  2. Work through the project plan in {current.repoPath}
-  3. Set tasks to "Resolved" when complete
-  4. Optionally resolve the parent story #{current.storyId}
-
-Ready to start?
-```
-
-Use `AskUserQuestion` with options: "Yes, start execution" / "No, cancel".
-If cancelled: "Execution cancelled. No changes made." Stop.
+Store the branch name as `current.branchName` for use in Step 9.
 
 **Step 5 — Activate tasks in Azure DevOps:**
 
+Track which task IDs are successfully activated in a list called `activatedTaskIds`.
+
 For each task ID in `current.taskIds`:
 1. Run `node ~/.claude/azdev-skill/bin/azdev-tools.cjs update-state --id {taskId} --state "Active" --cwd $CWD`
-2. If exit 0: note success.
-3. If exit 1: warn user but continue. The task may already be Active or in a state that doesn't allow transition to Active (e.g., already Resolved). This is non-blocking.
+2. If exit 0: add to `activatedTaskIds` and note success.
+3. If exit 1: warn user but continue. The task may already be Active or in a state that doesn't allow transition to Active (e.g., already Resolved). This is non-blocking. Do NOT add to `activatedTaskIds`.
 
 Display a brief status:
 ```
@@ -151,24 +143,20 @@ This is the main implementation phase. Work through the project plan:
    - Run any tests or build commands if the project has them (check for package.json scripts, Makefile, etc.).
    - After implementing a plan, update ROADMAP.md to mark it complete (change `- [ ]` to `- [x]`).
 
-4. **Match tasks to work**: As you complete work that corresponds to a specific Azure DevOps task (from `current.taskTitles`), note it for resolution in Step 7.
+4. **Match tasks to work**: As you complete work that corresponds to a specific Azure DevOps task (from `current.taskTitles`), note which tasks have been completed.
 
 5. **Handle issues**: If you encounter blockers or need clarification, use `AskUserQuestion` to consult the user. Do not guess at requirements.
 
-6. **Commit changes**: After meaningful chunks of work, offer to commit changes via git. Use descriptive commit messages referencing the story ID (e.g., "feat: implement API endpoint for #{storyId}").
+6. **Commit changes**: After meaningful chunks of work, commit changes via git. Use descriptive commit messages referencing the story ID (e.g., "feat: implement API endpoint for #{storyId}"). Do NOT ask the user — just commit directly on the feature branch.
 
-**Step 7 — Resolve completed tasks:**
+**Step 7 — Auto-resolve activated tasks:**
 
-After the implementation work is done (or at natural checkpoints), resolve tasks:
+After the implementation work is done, automatically resolve the tasks that were activated in Step 5:
 
-1. Use `AskUserQuestion` to confirm which tasks are complete:
-   "Which tasks are now complete?"
-   Options (multiSelect): one per task, labeled "#{taskId} -- {taskTitle}"
-
-2. For each selected task:
-   Run `node ~/.claude/azdev-skill/bin/azdev-tools.cjs update-state --id {taskId} --state "Resolved" --cwd $CWD`
-   - If exit 0: note success.
-   - If exit 1: warn user with error details.
+For each task ID in `activatedTaskIds`:
+1. Run `node ~/.claude/azdev-skill/bin/azdev-tools.cjs update-state --id {taskId} --state "Resolved" --cwd $CWD`
+2. If exit 0: note success.
+3. If exit 1: warn user with error details.
 
 Display:
 ```
@@ -177,19 +165,16 @@ Task resolution:
   #{taskId} ({taskTitle}): Resolved ✓
 ```
 
-**Step 8 — Check story completion:**
+**Step 8 — Auto-resolve story if all tasks done:**
 
 After resolving tasks, check if the parent story can be resolved:
 
 Run `node ~/.claude/azdev-skill/bin/azdev-tools.cjs get-child-states --id {current.storyId} --cwd $CWD`
 - Parse the JSON result.
 - If `allResolved === true`:
-  Use `AskUserQuestion`:
-  "All child tasks for story #{current.storyId} are resolved. Resolve the parent story too?"
-  Options: "Yes, resolve the story" / "No, keep it Active"
-
-  If yes: Run `node ~/.claude/azdev-skill/bin/azdev-tools.cjs update-state --id {current.storyId} --state "Resolved" --cwd $CWD`
-  Show result.
+  Automatically resolve the story:
+  Run `node ~/.claude/azdev-skill/bin/azdev-tools.cjs update-state --id {current.storyId} --state "Resolved" --cwd $CWD`
+  Display: "Story #{current.storyId} resolved ✓"
 
 - If `allResolved === false`:
   Display remaining open tasks:
@@ -198,7 +183,35 @@ Run `node ~/.claude/azdev-skill/bin/azdev-tools.cjs get-child-states --id {curre
     #{childId} -- {childTitle} ({childState})
   ```
 
-**Step 9 — Final summary:**
+**Step 9 — Push and create PR to develop:**
+
+1. Push the feature branch to remote:
+   `git push -u origin {current.branchName}`
+
+2. Create a pull request to develop using the `gh` CLI:
+   ```
+   gh pr create --base develop --head {current.branchName} --title "#{current.storyId} {current.storyTitle}" --body "$(cat <<'EOF'
+   ## Azure DevOps Story
+   #{current.storyId} — {current.storyTitle}
+
+   ## Changes
+   {Brief summary of what was implemented, based on the ROADMAP.md phases completed}
+
+   ## Tasks resolved
+   - #{taskId} — {taskTitle}
+   - #{taskId} — {taskTitle}
+
+   ## Test plan
+   - [ ] Verify acceptance criteria from story
+   - [ ] Run automated tests
+   - [ ] Code review
+   EOF
+   )"
+   ```
+
+3. Display the PR URL.
+
+**Step 10 — Final summary:**
 
 Display:
 ```
@@ -206,6 +219,7 @@ Display:
 
 Story: #{current.storyId} -- {current.storyTitle}
 Repo: {current.repoPath}
+Branch: {current.branchName}
 
 Tasks resolved: {count}/{total}
   #{taskId} -- {taskTitle}: Resolved
@@ -213,12 +227,14 @@ Tasks resolved: {count}/{total}
 
 Story status: {Resolved | Active (X tasks remaining)}
 
+PR: {prUrl}
+
 Files modified:
   {list of files changed during execution}
 
 Next steps:
   {If tasks remain: "Run `/azdev-execute` again to continue working on remaining tasks."}
-  {If story resolved: "Story complete! Run `/azdev-sprint` to see updated sprint status."}
+  {If story resolved: "Story complete! Review and merge the PR, then run `/azdev-sprint` to see updated sprint status."}
 ```
 
 </process>
@@ -237,16 +253,22 @@ Next steps:
 
 - Git operations fail in target repo: Warn user with error details. Continue with implementation if possible, or ask user to resolve the git issue manually.
 
+- `develop` branch does not exist on remote: Warn the user. Ask if they want to target a different base branch (e.g., `main`).
+
+- `gh pr create` fails: Warn user with error. The branch is already pushed, so suggest creating the PR manually in the browser.
+
 </error_handling>
 
 <success_criteria>
 - Task map is loaded and validated before any work begins
 - User selects which story to execute (or auto-selects if only one)
+- A feature branch is created from develop before any code changes
 - All child tasks are set to Active in Azure DevOps before implementation starts
 - Implementation follows the project plan (ROADMAP.md phases)
-- Tasks are set to Resolved after user confirms completion
-- Parent story resolution is offered when all child tasks are resolved
-- Clear summary shows what was done and what remains
+- Tasks that were activated are automatically resolved after implementation — no user prompt
+- Parent story is automatically resolved when all child tasks are resolved — no user prompt
+- Feature branch is pushed and a PR to develop is created
+- Clear summary shows what was done, PR link, and what remains
 - Non-blocking errors (failed state transitions) are warned but don't halt execution
-- User maintains control at key decision points (start, task resolution, story resolution)
+- User is only asked for input when selecting a story (multiple mappings) or when encountering blockers during implementation
 </success_criteria>
