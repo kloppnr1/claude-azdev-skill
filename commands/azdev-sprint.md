@@ -12,7 +12,7 @@ Fetch and display the current sprint backlog from Azure DevOps. Show sprint meta
 </objective>
 
 <execution_context>
-Helper: ~/.claude/get-shit-done/bin/azdev-tools.cjs
+Helper: ~/.claude/azdev-skill/bin/azdev-tools.cjs
 Config file: .planning/azdev-config.json
 </execution_context>
 
@@ -21,16 +21,16 @@ $CWD is the project directory where .planning/ lives.
 
 azdev-tools.cjs CLI contracts:
 
-  node ~/.claude/get-shit-done/bin/azdev-tools.cjs load-config --cwd $CWD
+  node ~/.claude/azdev-skill/bin/azdev-tools.cjs load-config --cwd $CWD
     -> stdout: JSON {"org":"...","project":"...","pat":"<raw-decoded>"}
     -> exit 0 on success, exit 1 if no config
 
-  node ~/.claude/get-shit-done/bin/azdev-tools.cjs get-sprint --cwd $CWD
+  node ~/.claude/azdev-skill/bin/azdev-tools.cjs get-sprint --cwd $CWD
     -> stdout: JSON {"iterationId":"...","name":"...","path":"...","startDate":"...","finishDate":"..."}
     -> exit 0 on success
     -> exit 1 on error (stderr contains message — e.g., no active sprint, auth failure)
 
-  node ~/.claude/get-shit-done/bin/azdev-tools.cjs get-sprint-items [--me] --cwd $CWD
+  node ~/.claude/azdev-skill/bin/azdev-tools.cjs get-sprint-items [--me] --cwd $CWD
     -> stdout: JSON array [{"id":N,"type":"User Story"|"Task"|"Bug"|...,"title":"...","state":"...","description":"...","acceptanceCriteria":"...","parentId":N|null,"assignedTo":"Name"|null}]
     -> --me: filter to items assigned to the authenticated user (includes parent stories of your tasks and child tasks of your stories)
     -> exit 0 on success (empty sprint returns [])
@@ -39,18 +39,18 @@ azdev-tools.cjs CLI contracts:
 
 <process>
 1. **Check prerequisites:**
-   - Verify `~/.claude/get-shit-done/bin/azdev-tools.cjs` exists using the Read tool or Bash `test -f`.
-     If it does not exist: tell the user "Azure DevOps tools not installed. Check that ~/.claude/get-shit-done/bin/azdev-tools.cjs exists." Stop.
-   - Run `node ~/.claude/get-shit-done/bin/azdev-tools.cjs load-config --cwd $CWD`
+   - Verify `~/.claude/azdev-skill/bin/azdev-tools.cjs` exists using the Read tool or Bash `test -f`.
+     If it does not exist: tell the user "Azure DevOps tools not installed. Check that ~/.claude/azdev-skill/bin/azdev-tools.cjs exists." Stop.
+   - Run `node ~/.claude/azdev-skill/bin/azdev-tools.cjs load-config --cwd $CWD`
      If exit 1: tell the user "No Azure DevOps config found. Run `/azdev-setup` to configure your connection." Stop.
 
 2. **Fetch sprint metadata:**
-   Run `node ~/.claude/get-shit-done/bin/azdev-tools.cjs get-sprint --cwd $CWD`
+   Run `node ~/.claude/azdev-skill/bin/azdev-tools.cjs get-sprint --cwd $CWD`
    - If exit 1: show the error message from stderr to the user. Stop.
    - If exit 0: parse the JSON from stdout. Extract: name, path, startDate, finishDate.
 
 3. **Fetch sprint items:**
-   Run `node ~/.claude/get-shit-done/bin/azdev-tools.cjs get-sprint-items --cwd $CWD`
+   Run `node ~/.claude/azdev-skill/bin/azdev-tools.cjs get-sprint-items --cwd $CWD`
    - If exit 1: show the error message from stderr to the user. Stop.
    - If exit 0: parse the JSON array from stdout.
 

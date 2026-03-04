@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 /**
- * azdo-tools.cjs — Azure DevOps API helper for GSD skills
+ * azdev-tools.cjs — Azure DevOps API helper for claude-azdev-skill
  *
  * Handles config file I/O, PAT encoding/decoding, HTTP requests to Azure DevOps REST API,
- * and connection testing. Built as a CJS module following the gsd-tools.cjs pattern.
+ * and connection testing. Pure Node.js — no external dependencies.
  * Uses ONLY Node.js built-ins (fs, path, https, Buffer). No external dependencies.
  *
  * Usage: node azdo-tools.cjs <command> [options] [--cwd <path>]

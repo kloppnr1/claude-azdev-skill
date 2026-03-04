@@ -12,7 +12,7 @@ Verify that the stored Azure DevOps credentials are valid and have the required 
 </objective>
 
 <execution_context>
-Helper: ~/.claude/get-shit-done/bin/azdev-tools.cjs
+Helper: ~/.claude/azdev-skill/bin/azdev-tools.cjs
 Config file: .planning/azdev-config.json
 </execution_context>
 
@@ -20,19 +20,19 @@ Config file: .planning/azdev-config.json
 $CWD is the project directory where .planning/ lives.
 
 azdev-tools.cjs test contract:
-  node ~/.claude/get-shit-done/bin/azdev-tools.cjs test --cwd $CWD
+  node ~/.claude/azdev-skill/bin/azdev-tools.cjs test --cwd $CWD
     -> Success: stdout "Connected to {org}/{project}", exit 0
     -> Failure: stderr error message with suggested fix, exit 1
 </context>
 
 <process>
 1. **Check azdev-tools.cjs exists:**
-   Check that `~/.claude/get-shit-done/bin/azdev-tools.cjs` exists before running.
-   If it does not exist: Tell user "Azure DevOps tools not installed. Check that ~/.claude/get-shit-done/bin/azdev-tools.cjs exists."
+   Check that `~/.claude/azdev-skill/bin/azdev-tools.cjs` exists before running.
+   If it does not exist: Tell user "Azure DevOps tools not installed. Check that ~/.claude/azdev-skill/bin/azdev-tools.cjs exists."
    Stop.
 
 2. **Run connection test:**
-   Run `node ~/.claude/get-shit-done/bin/azdev-tools.cjs test --cwd $CWD`
+   Run `node ~/.claude/azdev-skill/bin/azdev-tools.cjs test --cwd $CWD`
 
 3. **Show result:**
    - If exit 0: Show the success message from stdout to the user (e.g., "Connected to myorg/MyProject").
