@@ -8,7 +8,7 @@ allowed-tools:
 ---
 
 <objective>
-Fetch and display the current sprint backlog from Azure DevOps. Show sprint metadata (name, dates, iteration path) followed by work items grouped by parent story with tasks indented underneath.
+Fetch and display the current sprint backlog from Azure DevOps. Show sprint metadata (name, dates, iteration path) followed by work items grouped by parent story with tasks indented underneath. Output MUST use ANSI color codes via Bash for colored terminal output.
 </objective>
 
 <execution_context>
@@ -54,51 +54,97 @@ azdev-tools.cjs CLI contracts:
    - If exit 1: show the error message from stderr to the user. Stop.
    - If exit 0: parse the JSON array from stdout.
 
-4. **Format and display:**
-   Present the data in this exact terminal format:
+4. **Build and display colored output via Bash:**
+
+   IMPORTANT: All display output MUST be rendered using `echo -e` in a single Bash command. Do NOT output plain text directly — use Bash so the ANSI color codes are interpreted by the terminal.
+
+   Build a Bash script that uses `echo -e` to print the entire sprint board with ANSI colors. Use these color codes:
+
+   **ANSI color definitions:**
+   ```
+   RESET='\033[0m'
+   BOLD='\033[1m'
+   DIM='\033[2m'
+   WHITE='\033[37m'
+   CYAN='\033[36m'
+   BLUE='\033[34m'
+   GREEN='\033[32m'
+   RED='\033[31m'
+   YELLOW='\033[33m'
+   MAGENTA='\033[35m'
+   BG_BLUE='\033[44m'
+   ```
+
+   **State → color mapping:**
+   - "New" → `WHITE` with label `NEW`
+   - "Active" → `BLUE` with label `ACTIVE`
+   - "Resolved" → `GREEN` with label `RESOLVED`
+   - "Closed" / "Done" → `GREEN` + `BOLD` with label `DONE`
+   - "Removed" → `RED` with label `REMOVED`
+   - Any other → `YELLOW` with label in uppercase
+
+   **Output format:**
+
+   The Bash script should echo lines like this (using the ANSI variables):
 
    ```
-   === Sprint: {name} ===
-   Iteration: {path}
-   Dates: {startDate as YYYY-MM-DD} to {finishDate as YYYY-MM-DD}
-   Items: {total count}
+   echo -e ""
+   echo -e "${BOLD}${CYAN}━━━ Sprint: {name} ━━━${RESET}"
+   echo -e "${DIM}Iteration:${RESET} {path}"
+   echo -e "${DIM}Dates:${RESET}     {startDate} → {finishDate}"
+   echo -e "${DIM}Items:${RESET}     {total count}"
+   echo -e ""
+   ```
 
-   ---
+   For each top-level story/bug:
+   ```
+   echo -e "${BOLD}┌─ [{type}] #{id} -- {title}${RESET}"
+   echo -e "│  State: ${STATE_COLOR}{state}${RESET}  │  Assigned: {assignedTo or 'Unassigned'}"
+   ```
 
-   [{type abbreviation}] #{id} -- {title} ({state})
-        {description, first 3 lines only, indented 5 spaces}
-        Acceptance Criteria:
-          {each criterion line, indented 7 spaces}
-        Tasks:
-          [{type}] #{id} -- {title} ({state})
-          [{type}] #{id} -- {title} ({state})
+   If description exists (first 3 lines):
+   ```
+   echo -e "│  ${DIM}{description line 1}${RESET}"
+   echo -e "│  ${DIM}{description line 2}${RESET}"
+   ```
 
-   [{type abbreviation}] #{id} -- {title} ({state})
-        (no description)
-        (no acceptance criteria)
-        Tasks:
-          (none)
+   If acceptance criteria exist:
+   ```
+   echo -e "│"
+   echo -e "│  ${MAGENTA}Acceptance Criteria:${RESET}"
+   echo -e "│  ${DIM}- {criterion}${RESET}"
+   ```
+
+   For each child task:
+   ```
+   echo -e "│   ${STATE_COLOR}■${RESET} #{id} -- {title}  [${STATE_COLOR}{state}${RESET}]  {assignedTo}"
+   ```
+
+   Close the story box:
+   ```
+   echo -e "└──────"
+   echo -e ""
    ```
 
    **Formatting rules:**
-   - Type abbreviations: "User Story" -> "US", "Task" -> "Task", "Bug" -> "Bug"; all other types use the full type name.
-   - Group items by parent: items with `parentId === null` (or parentId not present in the items list) are top-level (stories/bugs). Items with a `parentId` that exists in the list are children (tasks) displayed indented under their parent.
-   - Orphaned tasks: if a child's parentId references an ID that is NOT in the sprint items list, display that child as a top-level item.
-   - Description: show first 3 lines only (split on newlines). If more than 3 lines, append "..." on line 4. If empty or null, show "(no description)".
-   - Acceptance Criteria: if empty or null, show "(no acceptance criteria)". Otherwise display each line indented 7 spaces.
-   - Tasks section under each parent: if no children found, show "(none)".
-   - Dates: parse ISO date strings and display as YYYY-MM-DD (take the first 10 characters). If null or undefined, show "not set".
-   - Use plain dashes "--" not em-dashes.
+   - **Type abbreviations:** "User Story" → "US", "Task" → "Task", "Bug" → "Bug"; all other types use the full type name.
+   - **Grouping:** items with `parentId === null` (or parentId not present in the items list) are top-level (stories/bugs). Items with a `parentId` that exists in the list are children (tasks) displayed under their parent.
+   - **Orphaned tasks:** if a child's parentId references an ID that is NOT in the sprint items list, display that child as a top-level item.
+   - **Description:** show first 3 lines only (split on newlines). If empty or null, show "(no description)" in DIM.
+   - **Acceptance Criteria:** if empty or null, show "(no acceptance criteria)" in DIM.
+   - **Dates:** parse ISO date strings and display as YYYY-MM-DD (take the first 10 characters). If null or undefined, show "not set".
+   - **Escape special chars:** when building the echo strings, escape any single quotes, double quotes, and backslashes in titles/descriptions so the Bash script doesn't break.
 
 5. **Handle edge cases:**
-   - Empty sprint (items array is []): display the sprint header, then "No work items in this sprint."
+   - Empty sprint (items array is []): display the sprint header, then echo "No work items in this sprint."
    - No active sprint: the `get-sprint` command returns exit 1 with a message; display that message and stop.
 </process>
 
 <success_criteria>
 - Sprint name, iteration path, and dates are shown at the top
 - Work items are grouped by parent story with tasks indented underneath
-- No HTML tags appear in the output (HTML is stripped by azdev-tools.cjs get-sprint-items)
-- Output is readable in a standard terminal
+- State indicators use ANSI colors visible in the terminal (blue for Active, green for Resolved, etc.)
+- All output is rendered via Bash echo -e so ANSI codes are interpreted
+- No HTML tags appear in the output
 - Empty sprint and no-active-sprint states produce clear, actionable messages
 </success_criteria>

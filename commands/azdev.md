@@ -87,6 +87,36 @@ For each top-level story (not child tasks), run:
 - Group stories by target repo using `repositoryName`.
 - Track stories with an empty array (`[]`) separately as "no branch link".
 
+**Step 4.5 — Code analysis per story:**
+
+After resolving branch links and local repo paths, analyze the code changes for each story that has a branch link.
+
+For each story with a resolved local repo path:
+
+1. **Switch to the target repo directory** and run `git fetch origin` to ensure branches are up to date.
+
+2. **Identify the branch**: use the `branchName` from step 4. Check it exists locally with `git branch --list {branchName}`. If not, run `git checkout -b {branchName} origin/{branchName}` or `git checkout {branchName}`.
+
+3. **Get the diff against the default branch** (usually `main` or `master`):
+   - Detect default branch: `git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@'`. Fall back to `main`, then `master`.
+   - Run `git diff {defaultBranch}...{branchName} --stat` to get a summary of changed files.
+   - Run `git diff {defaultBranch}...{branchName} --name-only` to get the list of changed files.
+   - If the branch has no diff (identical to default branch), note "Branch exists but has no changes yet."
+
+4. **Analyze the changes**:
+   - Read the changed files (use the Read tool) to understand what the code changes do.
+   - If there are more than 10 changed files, focus on the most significant ones (largest diffs, core logic files over config/generated files).
+   - Look at the repo structure (key directories, tech stack indicators like package.json, *.csproj, etc.).
+
+5. **Produce a code analysis summary** for each story:
+   - **Files changed**: count and list of key files
+   - **Tech stack**: detected from repo (e.g., "C# / .NET", "TypeScript / React", "Python / FastAPI")
+   - **Architecture observations**: what patterns or layers are being modified (e.g., "API controller + service layer + DB migration")
+   - **Current progress**: estimate based on diff size and completeness (e.g., "scaffolding only", "partial implementation", "mostly complete")
+   - **Risks or concerns**: anything notable (e.g., "no tests added yet", "modifies shared utility", "large migration file")
+
+Store this code analysis per story — it is used in Step 5.5 for the interactive verification and in Steps 8-10 for project file generation.
+
 **Step 5 — Show multi-repo summary and confirm:**
 
 Display summary in this format:
@@ -121,6 +151,14 @@ For each story that has a branch link (not skipped), present the following to th
 {2-3 sentences summarizing what the story is about, based on description + acceptance criteria + child tasks}
 
 **Work type:** [Code change / Manual/operational / Blocked]
+
+**Code analysis** (from Step 4.5):
+  Branch: {branchName}
+  Files changed: {count} ({list of key files})
+  Tech stack: {detected tech stack}
+  Architecture: {what layers/patterns are being modified}
+  Progress: {estimate of current state}
+  {If risks/concerns: "Risks: {risks}"}
 
 **Tasks:**
 {list of child tasks with their state}
@@ -225,9 +263,18 @@ This work is tracked as Azure DevOps story #{story.id}: "{story.title}".
 - State: {story.state}
 - Work type: {verified work type from Step 5.5}
 
+## Code Analysis
+
+{Code analysis summary from Step 4.5:}
+- **Tech stack**: {detected tech stack}
+- **Files changed**: {count} — {list of key changed files}
+- **Architecture**: {what patterns/layers are being modified}
+- **Progress**: {current state estimate}
+- **Risks**: {any concerns, or "None identified"}
+
 ## Constraints
 
-- **Tech stack**: Inferred from repo name and description (specify during phase planning)
+- **Tech stack**: {detected tech stack from code analysis}
 - **Auth**: Azure DevOps PAT for API access
 
 ## Key Decisions
@@ -413,6 +460,7 @@ If multiple repos were approved, list each with its next step.
 <success_criteria>
 - All assigned user stories are retrieved via get-sprint-items --me
 - Branch links resolve stories to target repos automatically (no manual mapping)
+- Code changes on each story's branch are analyzed (diff against default branch)
 - Multi-repo summary is shown before any file generation
 - Each story is interactively verified with the user before file generation (Step 5.5)
 - Verified analysis replaces the story description in Azure DevOps (Step 5.6)
