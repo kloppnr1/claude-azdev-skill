@@ -7,97 +7,177 @@ Azure DevOps sprint integration for [Claude Code](https://docs.anthropic.com/en/
 ```
 /azdev-setup            →  Connect to Azure DevOps (one-time)
 /azdev-sprint           →  See your sprint backlog
-/azdev-analyze          →  Analyze stories → resolve branches → review code → generate plans
+/azdev                  →  Analyze stories → resolve branches → review code → generate plans
 /azdev-execute          →  Execute one story → feature branch → PR to develop
 /azdev-execute-sprint   →  Execute ALL stories autonomously → zero interaction
 ```
 
 **The typical workflow:**
-1. Run `/azdev-analyze` — it finds your stories, checks out linked branches, analyzes the code, and generates project plans per repo
+1. Run `/azdev` — it finds your stories, checks out linked branches, analyzes the code, and generates project plans per repo
 2. Run `/azdev-execute` — it works through the plan, writes code, and updates Azure DevOps as tasks get done
 
 ## What it does
 
-### `/azdev-setup`
-Configure your Azure DevOps connection (org URL, project name, PAT). Stores credentials locally and verifies the connection works.
-
-### `/azdev-sprint`
-Display the current sprint backlog with visual state indicators. Stories are grouped with their child tasks, showing state (⚪ New, 🔵 Active, 🟢 Resolved, ✅ Done), description, acceptance criteria, and assigned team members.
-
-### `/azdev-analyze`
-The main analysis pipeline. Fetches your assigned stories and resolves their **branch links** — each story in Azure DevOps can be linked to a Git branch, and this command uses that link to find the corresponding local repo automatically. For each story:
-
-1. **Resolve branch link** — looks up the linked branch and maps it to a local repo (clones if needed)
-2. **Analyze code changes** — diffs the branch against main/master, reads changed files, detects tech stack and architecture patterns
-3. **Interactive verification** — presents its understanding of each story (summary, work type, code analysis) for your approval
-4. **Update story in Azure DevOps** — writes the verified analysis back to the story description (Azure DevOps keeps revision history)
-5. **Generate project files** — creates `PROJECT.md`, `ROADMAP.md`, and `REQUIREMENTS.md` in each target repo's `.planning/` directory
-6. **Write task map** — saves story-to-task mappings for `/azdev-execute` to use
-
-### `/azdev-execute`
-Execute the project plan for a single story. Creates a **feature branch** from develop, sets tasks to **Active**, works through the ROADMAP.md phases, auto-resolves tasks and story when done, pushes the branch, and creates a **PR to develop**. Only asks for input when selecting between multiple stories or hitting implementation blockers.
-
-### `/azdev-execute-sprint`
-Fully autonomous mode — executes **all stories** in the task map sequentially without any user interaction. Each story gets its own feature branch and PR. Errors on one story don't block the next. Outputs a full sprint summary with all PR links at the end.
+1. **Connect** — Configure your Azure DevOps org, project, and Personal Access Token
+2. **View sprint** — Fetch the current sprint backlog with stories, tasks, descriptions, and acceptance criteria
+3. **Analyze** — Run `/azdev` to analyze stories, verify understanding with the user, update descriptions in Azure DevOps, and generate project plans (PROJECT.md + ROADMAP.md + REQUIREMENTS.md) in each target repo
+4. **Execute** — Navigate to target repos and implement. Task status updates (New → Active → Resolved) are tracked via `azdev-task-map.json`
 
 ## Prerequisites
 
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
-- Node.js 18+ (no npm dependencies — uses built-in modules only)
-- Azure DevOps PAT with scopes: `vso.project`, `vso.work`, `vso.work_write`, `vso.code`
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI installed
+- Node.js (no external dependencies — uses built-in modules only)
+- An Azure DevOps Personal Access Token with these scopes:
+  - `vso.project` — read project/iteration data
+  - `vso.work` — read work items
+  - `vso.work_write` — update work item state
+  - `vso.code` — read Git repository info (for branch link resolution)
 
 ## Installation
 
 ```bash
-# Clone the repo
-git clone https://github.com/kloppnr1/claude-azdev-skill.git
-
-# Copy commands to Claude Code
-cp claude-azdev-skill/commands/azdev-*.md ~/.claude/commands/
-
-# Copy helper script
-mkdir -p ~/.claude/azdev-skill/bin
-cp claude-azdev-skill/bin/azdev-tools.cjs ~/.claude/azdev-skill/bin/
+cp commands/azdev*.md ~/.claude/commands/
 ```
 
 Restart Claude Code. The `/azdev-*` commands are now available.
 
-## Usage
+Copy the Node.js helper script to Claude Code's bin directory:
 
-```
-/azdev-setup           # First time: configure credentials
-/azdev-sprint          # View current sprint backlog
-/azdev-analyze         # Analyze stories and generate project plans
-/azdev-execute         # Execute one story → feature branch → PR
-/azdev-execute-sprint  # Execute entire sprint autonomously
+```bash
+mkdir -p ~/.claude/bin
+cp bin/azdev-tools.cjs ~/.claude/bin/
 ```
 
-## How it works
+### Configure credentials
 
-- **Command files** (`.md`) in `commands/` define Claude Code slash commands that orchestrate the workflow
-- **Helper script** (`bin/azdev-tools.cjs`) handles all Azure DevOps REST API v7.1 calls — pure Node.js, zero dependencies
-- **Config** is project-local at `.planning/azdev-config.json`
+Run the setup command in any project directory:
+
+```
+/azdev-setup
+```
+
+This prompts for:
+- **Organization URL** — e.g., `https://dev.azure.com/yourorg` or just `yourorg`
+- **Project name** — your Azure DevOps project
+- **PAT** — your Personal Access Token
+
+Credentials are stored in `.planning/azdev-config.json` (PAT is base64-encoded). This file is project-local — add it to `.gitignore`.
+
+### Verify connection
+
+```
+/azdev-test
+```
+
+Confirms your credentials work and have the required scopes.
+
+## Commands
+
+### `/azdev-setup`
+
+Interactive setup wizard for Azure DevOps credentials. On re-run, shows current values (PAT masked) and lets you update individual fields.
+
+### `/azdev-test`
+
+Tests the stored credentials against the Azure DevOps API. Verifies both `vso.project` and `vso.work` scopes. Shows a clear success/failure message with suggested fixes.
+
+### `/azdev-sprint`
+
+Fetches and displays the current sprint backlog with ANSI-colored state indicators. Shows:
+- Sprint name and dates
+- User stories with description and acceptance criteria
+- Tasks grouped under their parent story
+- State (blue=Active, green=Resolved, etc.), assigned user, and other metadata
+
+Supports `--me` flag to filter to your assigned items only.
+
+### `/azdev`
+
+The main analysis pipeline. It:
+
+1. Fetches your assigned stories from the current sprint
+2. Resolves branch links on each story to find the target repository
+3. Shows a summary: "You have N stories across M repos"
+4. For each story, presents its analysis for your review and verification
+5. Updates story descriptions in Azure DevOps with the verified analysis
+6. Generates PROJECT.md, ROADMAP.md, and REQUIREMENTS.md in each target repo
+7. Writes `.planning/azdev-task-map.json` — maps DevOps work item IDs to repos for status tracking
+
+### `/azdev-execute`
+
+Execute the project plan for a single story. Creates a **feature branch** from develop, sets tasks to **Active**, works through the ROADMAP.md phases, auto-resolves tasks and story when done, pushes the branch, and creates a **PR to develop**. Only asks for input when selecting between multiple stories or hitting implementation blockers.
+
+### `/azdev-execute-sprint`
+
+Fully autonomous mode — executes **all stories** in the task map sequentially without any user interaction. Each story gets its own feature branch and PR. Errors on one story don't block the next. Outputs a full sprint summary with all PR links at the end.
+
+## Status tracking
+
+The `azdev-task-map.json` file maps Azure DevOps task IDs to local repos. During execution, use `azdev-tools.cjs update-state` to transition tasks:
+
+- **Start work** → set tasks to **Active**
+- **Complete work** → set tasks to **Resolved**
+- **Check story** → use `get-child-states` to verify all children are done before resolving the story
+
+Status updates use the Azure DevOps REST API and require the `vso.work_write` PAT scope.
+
+## Helper script CLI
+
+The `azdev-tools.cjs` script handles all Azure DevOps API communication. It can be used standalone:
+
+```bash
+# Save/load credentials
+node azdev-tools.cjs save-config --org <url> --project <name> --pat <token> --cwd <path>
+node azdev-tools.cjs load-config --cwd <path>
+
+# Test connection
+node azdev-tools.cjs test --cwd <path>
+
+# Sprint data
+node azdev-tools.cjs get-sprint --cwd <path>
+node azdev-tools.cjs get-sprint-items [--me] --cwd <path>
+
+# Branch links (for repo resolution)
+node azdev-tools.cjs get-branch-links --id <workItemId> --cwd <path>
+
+# Work item updates
+node azdev-tools.cjs update-state --id <workItemId> --state <state> --cwd <path>
+node azdev-tools.cjs update-description --id <workItemId> --description "<text>" --cwd <path>
+
+# Child task state check (for story resolution logic)
+node azdev-tools.cjs get-child-states --id <storyId> --cwd <path>
+
+# Git branching
+node azdev-tools.cjs create-branch --repo <path> --story-id <id> --title <title> [--base <branch>]
+
+# Push and create PR
+node azdev-tools.cjs create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body>
+```
+
+All commands output JSON to stdout and use exit code 0/1 for success/failure.
+
+## Project structure
 
 ```
 claude-azdev-skill/
 ├── bin/
-│   └── azdev-tools.cjs       # Azure DevOps API helper
+│   └── azdev-tools.cjs          # Node.js helper — all Azure DevOps API calls
 ├── commands/
-│   ├── azdev-setup.md         # /azdev-setup
-│   ├── azdev-test.md          # /azdev-test
-│   ├── azdev-sprint.md        # /azdev-sprint
-│   ├── azdev-analyze.md         # /azdev-analyze
-│   ├── azdev-execute.md         # /azdev-execute
-│   └── azdev-execute-sprint.md  # /azdev-execute-sprint
-├── LICENSE
+│   ├── azdev-setup.md            # /azdev-setup — credential configuration
+│   ├── azdev-test.md             # /azdev-test — connection verification
+│   ├── azdev-sprint.md           # /azdev-sprint — sprint backlog display
+│   ├── azdev.md                  # /azdev — story analysis & project bootstrap pipeline
+│   ├── azdev-execute.md          # /azdev-execute — single story execution
+│   └── azdev-execute-sprint.md   # /azdev-execute-sprint — full sprint execution
 └── README.md
 ```
 
 ## Security
 
-- PAT is base64-encoded (not encrypted) in `.planning/azdev-config.json`
-- Always add `azdev-config.json` to `.gitignore`
-- No external dependencies — only Node.js built-ins (`https`, `fs`, `path`)
+- PAT is stored base64-encoded in `.planning/azdev-config.json` — this is light obfuscation, not encryption
+- Always add `azdev-config.json` to `.gitignore` — the setup command checks for this
+- The PAT never leaves your local machine except in API calls to your Azure DevOps instance
+- No external dependencies — the helper script uses only Node.js built-in modules (`https`, `fs`, `path`)
 
 ## License
 

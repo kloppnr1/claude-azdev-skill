@@ -18,7 +18,7 @@ Execute the project plan for one or more analyzed stories. For each story: creat
 </objective>
 
 <execution_context>
-Helper: ~/.claude/azdev-skill/bin/azdev-tools.cjs
+Helper: ~/.claude/bin/azdev-tools.cjs
 Config file: .planning/azdev-config.json
 Task map: .planning/azdev-task-map.json
 $CWD is the project directory where .planning/ lives.
@@ -27,26 +27,26 @@ $CWD is the project directory where .planning/ lives.
 <context>
 azdev-tools.cjs CLI contracts used by this command:
 
-  node ~/.claude/azdev-skill/bin/azdev-tools.cjs load-config --cwd $CWD
+  node ~/.claude/bin/azdev-tools.cjs load-config --cwd $CWD
     -> stdout: JSON {"org":"...","project":"...","pat":"<raw-decoded>"}
     -> exit 0 on success, exit 1 if no config
 
-  node ~/.claude/azdev-skill/bin/azdev-tools.cjs update-state --id <workItemId> --state <state> --cwd $CWD
+  node ~/.claude/bin/azdev-tools.cjs update-state --id <workItemId> --state <state> --cwd $CWD
     -> stdout: JSON {"status":"updated","id":N,"state":"<newState>"}
     -> Valid states: "New", "Active", "Resolved", "Closed"
     -> exit 0 on success, exit 1 on error (invalid transition, 403, etc.)
 
-  node ~/.claude/azdev-skill/bin/azdev-tools.cjs get-child-states --id <storyId> --cwd $CWD
+  node ~/.claude/bin/azdev-tools.cjs get-child-states --id <storyId> --cwd $CWD
     -> stdout: JSON {"allResolved": bool, "children": [{"id":N,"title":"...","state":"..."}]}
     -> allResolved is true when every child is Resolved, Closed, or Done
     -> exit 0 on success, exit 1 on error
 
-  node ~/.claude/azdev-skill/bin/azdev-tools.cjs create-branch --repo <path> --story-id <id> --title <title> [--base <branch>]
+  node ~/.claude/bin/azdev-tools.cjs create-branch --repo <path> --story-id <id> --title <title> [--base <branch>]
     -> Stashes dirty changes, fetches base branch (develop, fallback main), creates feature/<id>-<slug>
     -> stdout: JSON {"branch":"...","base":"...","created":true|false}
     -> exit 0 on success, exit 1 on error
 
-  node ~/.claude/azdev-skill/bin/azdev-tools.cjs create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body>
+  node ~/.claude/bin/azdev-tools.cjs create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body>
     -> Pushes branch to origin, creates PR using gh CLI
     -> stdout: JSON {"pr":"<url>","branch":"...","base":"...","pushed":true}
     -> exit 0 on success, exit 1 on error
@@ -72,10 +72,10 @@ azdev-task-map.json structure (written by /azdev-analyze):
 
 **Step 1 — Check prerequisites:**
 
-1. Verify `~/.claude/azdev-skill/bin/azdev-tools.cjs` exists via Bash `test -f`.
-   If missing: tell user "Azure DevOps tools not installed. Check that ~/.claude/azdev-skill/bin/azdev-tools.cjs exists." Stop.
+1. Verify `~/.claude/bin/azdev-tools.cjs` exists via Bash `test -f`.
+   If missing: tell user "Azure DevOps tools not installed. Check that ~/.claude/bin/azdev-tools.cjs exists." Stop.
 
-2. Run `node ~/.claude/azdev-skill/bin/azdev-tools.cjs load-config --cwd $CWD`.
+2. Run `node ~/.claude/bin/azdev-tools.cjs load-config --cwd $CWD`.
    If exit 1: tell user "No Azure DevOps config found. Run `/azdev-setup` to configure your connection." Stop.
 
 3. Check that `$CWD/.planning/azdev-task-map.json` exists via Bash `test -f`.
@@ -111,7 +111,7 @@ Store the selected mapping as `current`.
 
 **Step 4 — Create feature branch:**
 
-Run: `node ~/.claude/azdev-skill/bin/azdev-tools.cjs create-branch --repo {current.repoPath} --story-id {current.storyId} --title "{current.storyTitle}"`
+Run: `node ~/.claude/bin/azdev-tools.cjs create-branch --repo {current.repoPath} --story-id {current.storyId} --title "{current.storyTitle}"`
 
 - If exit 0: parse JSON. Store `branch` as `current.branchName` and `base` as `current.baseBranch`.
   - If `created === true`: "Created branch {branch} from {base}"
@@ -123,7 +123,7 @@ Run: `node ~/.claude/azdev-skill/bin/azdev-tools.cjs create-branch --repo {curre
 Track which task IDs are successfully activated in a list called `activatedTaskIds`.
 
 For each task ID in `current.taskIds`:
-1. Run `node ~/.claude/azdev-skill/bin/azdev-tools.cjs update-state --id {taskId} --state "Active" --cwd $CWD`
+1. Run `node ~/.claude/bin/azdev-tools.cjs update-state --id {taskId} --state "Active" --cwd $CWD`
 2. If exit 0: add to `activatedTaskIds` and note success.
 3. If exit 1: warn user but continue. The task may already be Active or in a state that doesn't allow transition to Active (e.g., already Resolved). This is non-blocking. Do NOT add to `activatedTaskIds`.
 
@@ -160,7 +160,7 @@ This is the main implementation phase. Work through the project plan:
 After the implementation work is done, automatically resolve the tasks that were activated in Step 5:
 
 For each task ID in `activatedTaskIds`:
-1. Run `node ~/.claude/azdev-skill/bin/azdev-tools.cjs update-state --id {taskId} --state "Resolved" --cwd $CWD`
+1. Run `node ~/.claude/bin/azdev-tools.cjs update-state --id {taskId} --state "Resolved" --cwd $CWD`
 2. If exit 0: note success.
 3. If exit 1: warn user with error details.
 
@@ -175,11 +175,11 @@ Task resolution:
 
 After resolving tasks, check if the parent story can be resolved:
 
-Run `node ~/.claude/azdev-skill/bin/azdev-tools.cjs get-child-states --id {current.storyId} --cwd $CWD`
+Run `node ~/.claude/bin/azdev-tools.cjs get-child-states --id {current.storyId} --cwd $CWD`
 - Parse the JSON result.
 - If `allResolved === true`:
   Automatically resolve the story:
-  Run `node ~/.claude/azdev-skill/bin/azdev-tools.cjs update-state --id {current.storyId} --state "Resolved" --cwd $CWD`
+  Run `node ~/.claude/bin/azdev-tools.cjs update-state --id {current.storyId} --state "Resolved" --cwd $CWD`
   Display: "Story #{current.storyId} resolved ✓"
 
 - If `allResolved === false`:
@@ -209,7 +209,7 @@ Build a PR body string containing:
 - [ ] Code review
 ```
 
-Run: `node ~/.claude/azdev-skill/bin/azdev-tools.cjs create-pr --repo {current.repoPath} --branch {current.branchName} --base {current.baseBranch} --title "#{current.storyId} {current.storyTitle}" --body "{prBody}"`
+Run: `node ~/.claude/bin/azdev-tools.cjs create-pr --repo {current.repoPath} --branch {current.branchName} --base {current.baseBranch} --title "#{current.storyId} {current.storyTitle}" --body "{prBody}"`
 
 - If exit 0: parse JSON. Store `pr` URL for the summary.
 - If exit 1: warn user. The branch may already be pushed — suggest creating PR manually.

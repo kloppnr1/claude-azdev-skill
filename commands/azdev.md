@@ -1,6 +1,6 @@
 ---
-name: azdev-analyze
-description: Analyze sprint stories and bootstrap project plans in target repos
+name: azdev
+description: Analyze sprint stories, verify with user, update descriptions, and bootstrap project plans in target repos
 argument-hint: ""
 allowed-tools:
   - Read
@@ -10,11 +10,11 @@ allowed-tools:
 ---
 
 <objective>
-Fetch assigned stories from the current Azure DevOps sprint, resolve their branch links to local repos, display a multi-repo summary, generate PROJECT.md + ROADMAP.md + REQUIREMENTS.md per target repo, and present each for user approval.
+Fetch assigned stories from the current Azure DevOps sprint, resolve their branch links to local repos, interactively verify each story with the user, update story descriptions in Azure DevOps, generate PROJECT.md + ROADMAP.md + REQUIREMENTS.md per target repo, and present each for user approval. Write azdev-task-map.json for status tracking during execution.
 </objective>
 
 <execution_context>
-Helper: ~/.claude/azdev-skill/bin/azdev-tools.cjs
+Helper: ~/.claude/bin/azdev-tools.cjs
 Config file: .planning/azdev-config.json
 $CWD is the project directory where .planning/ lives.
 </execution_context>
@@ -22,26 +22,26 @@ $CWD is the project directory where .planning/ lives.
 <context>
 azdev-tools.cjs CLI contracts:
 
-  node ~/.claude/azdev-skill/bin/azdev-tools.cjs load-config --cwd $CWD
+  node ~/.claude/bin/azdev-tools.cjs load-config --cwd $CWD
     -> stdout: JSON {"org":"...","project":"...","pat":"<raw-decoded>"}
     -> exit 0 on success, exit 1 if no config
 
-  node ~/.claude/azdev-skill/bin/azdev-tools.cjs get-sprint --cwd $CWD
+  node ~/.claude/bin/azdev-tools.cjs get-sprint --cwd $CWD
     -> stdout: JSON {"iterationId":"...","name":"...","path":"...","startDate":"...","finishDate":"..."}
     -> exit 0 on success, exit 1 on error
 
-  node ~/.claude/azdev-skill/bin/azdev-tools.cjs get-sprint-items --me --cwd $CWD
+  node ~/.claude/bin/azdev-tools.cjs get-sprint-items --me --cwd $CWD
     -> stdout: JSON array [{id, type, title, state, description, acceptanceCriteria, parentId, assignedTo}]
     -> --me: filter to authenticated user's items (parent stories + child tasks)
     -> exit 0 on success, exit 1 on error
 
-  node ~/.claude/azdev-skill/bin/azdev-tools.cjs get-branch-links --id <storyId> --cwd $CWD
+  node ~/.claude/bin/azdev-tools.cjs get-branch-links --id <storyId> --cwd $CWD
     -> stdout: JSON array [{ repositoryId, repositoryName, remoteUrl, branchName }]
     -> Returns [] if no branch link found (not an error)
     -> exit 0 on success, exit 1 on API error
     -> Required PAT scopes: vso.work + vso.code
 
-  node ~/.claude/azdev-skill/bin/azdev-tools.cjs update-description --id <workItemId> --description "<html>" --cwd $CWD
+  node ~/.claude/bin/azdev-tools.cjs update-description --id <workItemId> --description "<html>" --cwd $CWD
     -> stdout: JSON {"status":"updated","id":N}
     -> Uses PATCH API with application/json-patch+json content type
     -> exit 0 on success, exit 1 on error
@@ -51,23 +51,23 @@ azdev-tools.cjs CLI contracts:
 
 **Step 1 — Check prerequisites:**
 
-1. Verify `~/.claude/azdev-skill/bin/azdev-tools.cjs` exists via Bash `test -f ~/.claude/azdev-skill/bin/azdev-tools.cjs`.
-   If it does not exist: tell the user "Azure DevOps tools not installed. Check that ~/.claude/azdev-skill/bin/azdev-tools.cjs exists." Stop.
+1. Verify `~/.claude/bin/azdev-tools.cjs` exists via Bash `test -f ~/.claude/bin/azdev-tools.cjs`.
+   If it does not exist: tell the user "Azure DevOps tools not installed. Check that ~/.claude/bin/azdev-tools.cjs exists." Stop.
 
-2. Run `node ~/.claude/azdev-skill/bin/azdev-tools.cjs load-config --cwd $CWD`.
+2. Run `node ~/.claude/bin/azdev-tools.cjs load-config --cwd $CWD`.
    If exit 1: tell the user "No Azure DevOps config found. Run `/azdev-setup` to configure your connection." Stop.
 
 3. Note: The Git Repositories API (called internally by `get-branch-links`) requires the `vso.code` PAT scope in addition to `vso.work`. If step 4 (below) produces errors about repository lookup, advise the user to regenerate their PAT with `vso.code` scope added and re-run `/azdev-setup`.
 
 **Step 2 — Fetch sprint metadata:**
 
-Run `node ~/.claude/azdev-skill/bin/azdev-tools.cjs get-sprint --cwd $CWD`.
+Run `node ~/.claude/bin/azdev-tools.cjs get-sprint --cwd $CWD`.
 - If exit 1: show the error message to the user. Stop.
 - If exit 0: parse the JSON. Extract `name` for display.
 
 **Step 3 — Fetch assigned stories:**
 
-Run `node ~/.claude/azdev-skill/bin/azdev-tools.cjs get-sprint-items --me --cwd $CWD`.
+Run `node ~/.claude/bin/azdev-tools.cjs get-sprint-items --me --cwd $CWD`.
 - If exit 1: show the error message to the user. Stop.
 - If exit 0: parse the JSON array.
 
@@ -80,7 +80,7 @@ Argument handling: If the user passed an argument to this skill (e.g., a task ID
 **Step 4 — Resolve branch links:**
 
 For each top-level story (not child tasks), run:
-  `node ~/.claude/azdev-skill/bin/azdev-tools.cjs get-branch-links --id {storyId} --cwd $CWD`
+  `node ~/.claude/bin/azdev-tools.cjs get-branch-links --id {storyId} --cwd $CWD`
 
 - Parse the JSON array result.
 - If multiple branch links exist for a story, use the first one (Claude's discretion).
@@ -135,7 +135,7 @@ Repo: {repoName} ({remoteUrl})
 {K} story/stories have no branch link and will be skipped:
   [US] #{id} -- {title} ({state})
 
-Proceed to generate project plans for {M} repos? (yes/no)
+Proceed to analyze {N} stories across {M} repos? (yes/no)
 ```
 
 Use `AskUserQuestion` tool for confirmation. If the user says "no" or anything other than "yes", stop with: "Analysis cancelled. No changes made."
@@ -171,7 +171,7 @@ Use `AskUserQuestion` with:
 If "Yes": store the verified understanding (summary text + work type) for this story.
 If "No, let me correct it": ask "What is the correct understanding?" as a free-text follow-up. Then re-present the corrected version for confirmation. Repeat until approved.
 
-The verified understanding per story is used in Steps 8-10 for better project file generation.
+The verified understanding per story is used in later steps for project file generation.
 
 **Step 5.6 — Update story description in Azure DevOps:**
 
@@ -189,10 +189,10 @@ Construct the new description HTML:
 
 Then run:
 ```
-node ~/.claude/azdev-skill/bin/azdev-tools.cjs update-description --id {storyId} --description "{newDescriptionHtml}" --cwd $CWD
+node ~/.claude/bin/azdev-tools.cjs update-description --id {storyId} --description "{newDescriptionHtml}" --cwd $CWD
 ```
 
-If update fails, warn the user but continue (non-blocking error). The verified understanding is still used locally for project file generation.
+If update fails, warn the user but continue (non-blocking error). The verified understanding is still used locally for file generation.
 
 **Step 6 — For each target repo, resolve local path:**
 
@@ -284,7 +284,7 @@ This work is tracked as Azure DevOps story #{story.id}: "{story.title}".
 | (Defined during phase planning) | | |
 
 ---
-*Last updated: {today's date} after analysis via /azdev-analyze*
+*Last updated: {today's date} after analysis via /azdev*
 ```
 
 Formatting rules:
@@ -366,7 +366,7 @@ Derive requirement IDs from acceptance criteria and child tasks. Format:
 **Acceptance**: {same criterion text}
 
 ---
-*Generated from Azure DevOps sprint analysis via /azdev-analyze*
+*Generated from Azure DevOps sprint analysis via /azdev*
 *Sprint: {sprintName}*
 *Story: #{story.id} -- {story.title}*
 ```
@@ -399,7 +399,7 @@ For each **approved** repo, create a mapping entry:
 - `storyId`: the Azure DevOps story ID (number)
 - `storyTitle`: the story title
 - `repoPath`: the resolved local repo path
-- `taskIds`: array of child task IDs that belong to this story (code-type tasks)
+- `taskIds`: array of child task IDs that belong to this story
 - `taskTitles`: object mapping task ID (as string key) to task title
 
 Write the complete map to `$CWD/.planning/azdev-task-map.json` using the Write tool:
@@ -412,9 +412,9 @@ Write the complete map to `$CWD/.planning/azdev-task-map.json` using the Write t
 }
 ```
 
-If all repos were skipped (no approved entries), do NOT write the file. The absence of `azdev-task-map.json` means no automatic status updates will happen — execute-phase checks for file existence before calling update-state.
+If all repos were skipped (no approved entries), do NOT write the file.
 
-This file enables automatic Azure DevOps status updates at execution boundaries: tasks are marked Active at execution start and Resolved at execution end.
+This file is used for automatic Azure DevOps status updates during execution: tasks are identified by their IDs and can be transitioned New → Active → Resolved using `azdev-tools.cjs update-state`.
 
 **Step 12 — Final summary:**
 
@@ -430,8 +430,11 @@ Skipped:
   {repoName}: no branch link
   {repoName}: user skipped
 
+Task map written to: $CWD/.planning/azdev-task-map.json
+
 Next steps:
-  cd {repoPath} and start working on the project plan
+  Navigate to each target repo to begin implementation.
+  Use azdev-task-map.json to track and update task status in Azure DevOps.
 ```
 
 If multiple repos were approved, list each with its next step.
@@ -459,14 +462,13 @@ If multiple repos were approved, list each with its next step.
 - Branch links resolve stories to target repos automatically (no manual mapping)
 - Code changes on each story's branch are analyzed (diff against default branch)
 - Multi-repo summary is shown before any file generation
-- Each story is interactively verified with the user before project generation (Step 5.5)
-- Verified analysis is appended to AzDO story description (Step 5.6)
-- PROJECT.md and ROADMAP.md and REQUIREMENTS.md use the verified understanding (not raw AzDO data)
+- Each story is interactively verified with the user before file generation (Step 5.5)
+- Verified analysis replaces the story description in Azure DevOps (Step 5.6)
+- PROJECT.md, ROADMAP.md, and REQUIREMENTS.md use the verified understanding (not raw AzDO data)
 - Stories are correctly categorized by work type (code change vs manual/operational vs blocked)
 - User can approve or request changes per repo before files are finalized
 - Stories without branch links are listed but skipped gracefully with a message
 - No HTML artifacts appear in any generated file
-- After approval, the project plan can be used to start implementation in the target repo
 - azdev-task-map.json is written to $CWD/.planning/ with story-to-task mappings for all approved repos
-- The task map file enables automatic Azure DevOps status updates at execution boundaries
+- Task IDs in the map can be used to update status (New → Active → Resolved) during execution
 </success_criteria>
