@@ -55,40 +55,57 @@ azdev-tools.cjs CLI contracts:
    - If exit 0: parse the JSON array from stdout.
 
 4. **Format and display:**
-   Present the data in this exact terminal format:
+   Present the data using markdown with state indicators. Use this format:
 
    ```
-   === Sprint: {name} ===
-   Iteration: {path}
-   Dates: {startDate as YYYY-MM-DD} to {finishDate as YYYY-MM-DD}
-   Items: {total count}
+   ## 🏃 Sprint: {name}
+   **Iteration:** {path}
+   **Dates:** {startDate as YYYY-MM-DD} → {finishDate as YYYY-MM-DD}
+   **Items:** {total count}
 
    ---
 
-   [{type abbreviation}] #{id} -- {title} ({state})
-        {description, first 3 lines only, indented 5 spaces}
-        Acceptance Criteria:
-          {each criterion line, indented 7 spaces}
-        Tasks:
-          [{type}] #{id} -- {title} ({state})
-          [{type}] #{id} -- {title} ({state})
+   ### {stateEmoji} [{type abbreviation}] #{id} -- {title}
+   **State:** {state} | **Assigned to:** {assignedTo or "Unassigned"}
 
-   [{type abbreviation}] #{id} -- {title} ({state})
-        (no description)
-        (no acceptance criteria)
-        Tasks:
-          (none)
+   > {description, first 3 lines only}
+   > ...
+
+   **Acceptance Criteria:**
+   {each criterion as a line}
+
+   **Tasks:**
+   | | Task | State |
+   |---|------|-------|
+   | {stateEmoji} | #{id} -- {title} | {state} |
+   | {stateEmoji} | #{id} -- {title} | {state} |
+
+   ---
+
+   ### {stateEmoji} [{type abbreviation}] #{id} -- {title}
+   **State:** {state} | **Assigned to:** {assignedTo}
+
+   > *(no description)*
+
+   **Tasks:** *(none)*
    ```
 
    **Formatting rules:**
-   - Type abbreviations: "User Story" -> "US", "Task" -> "Task", "Bug" -> "Bug"; all other types use the full type name.
-   - Group items by parent: items with `parentId === null` (or parentId not present in the items list) are top-level (stories/bugs). Items with a `parentId` that exists in the list are children (tasks) displayed indented under their parent.
-   - Orphaned tasks: if a child's parentId references an ID that is NOT in the sprint items list, display that child as a top-level item.
-   - Description: show first 3 lines only (split on newlines). If more than 3 lines, append "..." on line 4. If empty or null, show "(no description)".
-   - Acceptance Criteria: if empty or null, show "(no acceptance criteria)". Otherwise display each line indented 7 spaces.
-   - Tasks section under each parent: if no children found, show "(none)".
-   - Dates: parse ISO date strings and display as YYYY-MM-DD (take the first 10 characters). If null or undefined, show "not set".
-   - Use plain dashes "--" not em-dashes.
+   - **State emoji mapping:** Use these emoji based on the `state` field:
+     - "New" → ⚪
+     - "Active" → 🔵
+     - "Resolved" → 🟢
+     - "Closed" / "Done" → ✅
+     - "Removed" → 🔴
+     - Any other state → 🟡
+   - **Type abbreviations:** "User Story" → "US", "Task" → "Task", "Bug" → "🐛 Bug"; all other types use the full type name.
+   - **Grouping:** items with `parentId === null` (or parentId not present in the items list) are top-level (stories/bugs). Items with a `parentId` that exists in the list are children (tasks) displayed in a table under their parent.
+   - **Orphaned tasks:** if a child's parentId references an ID that is NOT in the sprint items list, display that child as a top-level item.
+   - **Description:** show first 3 lines only (split on newlines) in a blockquote. If more than 3 lines, append "..." on line 4. If empty or null, show "*(no description)*".
+   - **Acceptance Criteria:** if empty or null, show "*(no acceptance criteria)*". Otherwise display each line.
+   - **Tasks section:** if no children found, show "*(none)*".
+   - **Dates:** parse ISO date strings and display as YYYY-MM-DD (take the first 10 characters). If null or undefined, show "not set".
+   - Use plain dashes "--" not em-dashes (except the arrow → for dates).
 
 5. **Handle edge cases:**
    - Empty sprint (items array is []): display the sprint header, then "No work items in this sprint."
