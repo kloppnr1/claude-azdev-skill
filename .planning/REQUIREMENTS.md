@@ -29,7 +29,7 @@
 
 ### Status
 
-- [ ] **STAT-01**: System can update work item status in Azure DevOps (New → Active → Closed)
+- [x] **STAT-01**: System can update work item status in Azure DevOps (New → Active → Closed)
 
 ## v2 Requirements
 
@@ -70,7 +70,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ANAL-03 | Phase 3 | Complete |
 | REPO-01 | Phase 3 | Complete |
 | REPO-02 | Phase 3 | Complete |
-| STAT-01 | Phase 4 | Pending |
+| STAT-01 | Phase 4 | Complete |
 
 **Coverage:**
 - v1 requirements: 11 total
