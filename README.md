@@ -2,6 +2,19 @@
 
 Azure DevOps sprint integration for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Connects your sprint backlog to your local repos — analyzes stories, reviews code on linked branches, generates project plans, executes work, and keeps Azure DevOps in sync.
 
+## Quick overview
+
+```
+/azdev-setup       →  Connect to Azure DevOps (one-time)
+/azdev-sprint      →  See your sprint backlog
+/azdev-analyze     →  Analyze stories → resolve branches → review code → generate plans
+/azdev-execute     →  Execute plans → update task status → resolve stories
+```
+
+**The typical workflow:**
+1. Run `/azdev-analyze` — it finds your stories, checks out linked branches, analyzes the code, and generates project plans per repo
+2. Run `/azdev-execute` — it works through the plan, writes code, and updates Azure DevOps as tasks get done
+
 ## What it does
 
 ### `/azdev-setup`
