@@ -60,20 +60,21 @@ Plans:
 **Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 03-01-PLAN.md — Add get-branch-links command to azdo-tools.cjs (branch link resolution)
-- [ ] 03-02-PLAN.md — Create /gsd:azdo-analyze skill command (sprint-to-GSD-project pipeline)
+- [x] 03-01-PLAN.md — Add get-branch-links command to azdo-tools.cjs (branch link resolution)
+- [x] 03-02-PLAN.md — Create /gsd:azdo-analyze skill command (sprint-to-GSD-project pipeline)
 
 ### Phase 4: Status
-**Goal**: User can update work item status in Azure DevOps directly from GSD
+**Goal**: Work item status updates happen automatically as a side effect of GSD execute-phase — tasks and stories transition through New, Active, and Resolved without manual commands
 **Depends on**: Phase 3
 **Requirements**: STAT-01
 **Success Criteria** (what must be TRUE):
   1. User can change a work item's state (New, Active, Closed) from within a GSD skill command without opening Azure DevOps in a browser
   2. The state change is reflected in Azure DevOps immediately after the command runs
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-(TBD — populated during plan-phase)
+- [ ] 04-01-PLAN.md — Add update-state and get-child-states CLI commands to azdo-tools.cjs
+- [ ] 04-02-PLAN.md — Wire status updates into azdo-analyze (task map) and execute-phase (automatic transitions)
 
 ## Progress
 
@@ -85,4 +86,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Foundation | 2/2 | Complete    | 2026-03-04 |
 | 2. Sprint Data | 2/2 | Complete   | 2026-03-04 |
 | 3. Analysis | 2/2 | Complete   | 2026-03-04 |
-| 4. Status | 0/TBD | Not started | - |
+| 4. Status | 0/2 | Not started | - |
