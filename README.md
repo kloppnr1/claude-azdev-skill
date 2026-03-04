@@ -152,6 +152,9 @@ node azdev-tools.cjs create-branch --repo <path> --story-id <id> --title <title>
 
 # Push and create PR
 node azdev-tools.cjs create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body>
+
+# Display sprint board (fetch + render in one command)
+node azdev-tools.cjs show-sprint [--me] --cwd <path>
 ```
 
 All commands output JSON to stdout and use exit code 0/1 for success/failure.
