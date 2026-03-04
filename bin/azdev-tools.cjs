@@ -75,6 +75,13 @@
  *     Pushes the branch to origin and creates a pull request using the gh CLI.
  *     stdout: JSON {"pr":"<url>","branch":"...","base":"...","pushed":true}
  *     Exit 0 on success, exit 1 on error.
+ *
+ *   show-sprint [--me] [--cwd <path>]
+ *     Fetches sprint data and renders a colored board to stdout using ANSI codes.
+ *     Combines get-sprint + get-sprint-items + rendering in a single command.
+ *     --me: Filter to items assigned to the authenticated user.
+ *     stdout: ANSI-colored sprint board text
+ *     Exit 0 on success, exit 1 on error.
  */
 
 'use strict';
@@ -938,6 +945,245 @@ async function cmdGetChildStates(cwd, args) {
   }
 }
 
+// ─── Sprint Rendering ───────────────────────────────────────────────────────────
+
+/**
+ * Renders a sprint board with ANSI colors given sprint metadata and items.
+ * Pure rendering function — no I/O, returns array of lines.
+ * @param {object} sprint - Sprint metadata (name, path, startDate, finishDate)
+ * @param {Array} items - Work items array from get-sprint-items
+ * @returns {string[]} Lines of ANSI-colored output
+ */
+function renderSprintBoard(sprint, items) {
+  const RESET = '\x1b[0m';
+  const BOLD = '\x1b[1m';
+  const DIM = '\x1b[2m';
+  const WHITE = '\x1b[37m';
+  const CYAN = '\x1b[36m';
+  const BLUE = '\x1b[34m';
+  const GREEN = '\x1b[32m';
+  const RED = '\x1b[31m';
+  const YELLOW = '\x1b[33m';
+  const MAGENTA = '\x1b[35m';
+
+  function stateColor(state) {
+    switch (state) {
+      case 'New': return WHITE;
+      case 'Active': return BLUE;
+      case 'Resolved': return GREEN;
+      case 'Closed': case 'Done': return GREEN + BOLD;
+      case 'Removed': return RED;
+      default: return YELLOW;
+    }
+  }
+
+  function stateLabel(state) {
+    switch (state) {
+      case 'Closed': case 'Done': return 'DONE';
+      default: return state ? state.toUpperCase() : 'UNKNOWN';
+    }
+  }
+
+  function typeAbbrev(type) {
+    if (type === 'User Story') return 'US';
+    return type || 'Item';
+  }
+
+  function formatDate(d) {
+    if (!d) return 'not set';
+    return String(d).slice(0, 10);
+  }
+
+  // Use the module-level stripHtml for description/AC fields
+  const lines = [];
+  const push = (l) => lines.push(l);
+
+  // Sprint header
+  push('');
+  push(`${BOLD}${CYAN}━━━ Sprint: ${sprint.name || 'Unknown'} ━━━${RESET}`);
+  push(`${DIM}Iteration:${RESET} ${sprint.path || 'N/A'}`);
+  push(`${DIM}Dates:${RESET}     ${formatDate(sprint.startDate)} → ${formatDate(sprint.finishDate)}`);
+  push(`${DIM}Items:${RESET}     ${items.length}`);
+  push('');
+
+  if (items.length === 0) {
+    push('No work items in this sprint.');
+    return lines;
+  }
+
+  // Build parent-child grouping
+  const itemMap = new Map();
+  items.forEach(item => itemMap.set(item.id, item));
+
+  const topLevel = [];
+  const childrenOf = new Map();
+
+  items.forEach(item => {
+    if (item.parentId && itemMap.has(item.parentId)) {
+      if (!childrenOf.has(item.parentId)) childrenOf.set(item.parentId, []);
+      childrenOf.get(item.parentId).push(item);
+    } else {
+      topLevel.push(item);
+    }
+  });
+
+  for (const story of topLevel) {
+    const sc = stateColor(story.state);
+    const abbrev = typeAbbrev(story.type);
+    const assigned = story.assignedTo || 'Unassigned';
+
+    push(`${BOLD}┌─ [${abbrev}] #${story.id} — ${story.title}${RESET}`);
+    push(`│  State: ${sc}${stateLabel(story.state)}${RESET}  │  Assigned: ${assigned}`);
+
+    // Description (first 3 lines) — items already have HTML stripped by get-sprint-items
+    const desc = story.description || '';
+    if (desc) {
+      const descLines = desc.split('\n').filter(l => l.trim()).slice(0, 3);
+      for (const dl of descLines) {
+        push(`│  ${DIM}${dl}${RESET}`);
+      }
+    } else {
+      push(`│  ${DIM}(no description)${RESET}`);
+    }
+
+    // Acceptance criteria
+    const ac = story.acceptanceCriteria || '';
+    if (ac) {
+      push('│');
+      push(`│  ${MAGENTA}Acceptance Criteria:${RESET}`);
+      const acLines = ac.split('\n').filter(l => l.trim());
+      for (const al of acLines) {
+        push(`│  ${DIM}${al}${RESET}`);
+      }
+    } else {
+      push('│');
+      push(`│  ${MAGENTA}Acceptance Criteria:${RESET}`);
+      push(`│  ${DIM}(no acceptance criteria)${RESET}`);
+    }
+
+    // Child tasks
+    const children = childrenOf.get(story.id) || [];
+    if (children.length > 0) {
+      push('│');
+      for (const child of children) {
+        const cc = stateColor(child.state);
+        const ca = child.assignedTo || 'Unassigned';
+        push(`│   ${cc}■${RESET} #${child.id} — ${child.title}  [${cc}${stateLabel(child.state)}${RESET}]  ${ca}`);
+      }
+    }
+
+    push('└──────');
+    push('');
+  }
+
+  return lines;
+}
+
+/**
+ * Handles the show-sprint command.
+ * Fetches sprint metadata and items from Azure DevOps, then renders
+ * a colored terminal board. Single command — no intermediate JSON passing needed.
+ *
+ * Usage: azdev-tools.cjs show-sprint [--me] [--cwd <path>]
+ *
+ * stdout: ANSI-colored sprint board
+ * Exit 0 on success, exit 1 on error.
+ *
+ * @param {string} cwd - Working directory
+ * @param {string[]} args - CLI args (supports --me)
+ */
+async function cmdShowSprint(cwd, args) {
+  const mine = args && args.includes('--me');
+
+  try {
+    const { cfg, encodedPat, teamName, iteration } = await getSprintData(cwd);
+
+    // Build sprint metadata
+    const sprint = {
+      name: iteration.name,
+      path: iteration.path,
+      startDate: iteration.attributes ? iteration.attributes.startDate : null,
+      finishDate: iteration.attributes ? iteration.attributes.finishDate : null,
+    };
+
+    // Fetch work item IDs
+    const workItemsUrl = `${cfg.org}/${cfg.project}/${encodeURIComponent(teamName)}/_apis/work/teamsettings/iterations/${iteration.id}/workitems?api-version=7.1`;
+    const wiRes = await makeRequest(workItemsUrl, encodedPat);
+    if (wiRes.status !== 200) {
+      throw new Error(`Failed to fetch sprint work items: HTTP ${wiRes.status}`);
+    }
+
+    const wiData = JSON.parse(wiRes.body);
+    const idSet = new Set();
+    for (const rel of (wiData.workItemRelations || [])) {
+      if (rel.target) idSet.add(rel.target.id);
+      if (rel.source) idSet.add(rel.source.id);
+    }
+    const ids = Array.from(idSet);
+
+    if (ids.length === 0) {
+      const lines = renderSprintBoard(sprint, []);
+      process.stdout.write(lines.join('\n') + '\n');
+      process.exit(0);
+    }
+
+    let batchIds = ids;
+    if (ids.length > 200) {
+      console.error(`Warning: Sprint has ${ids.length} work items, showing first 200.`);
+      batchIds = ids.slice(0, 200);
+    }
+
+    // Batch fetch details
+    const batchUrl = `${cfg.org}/${cfg.project}/_apis/wit/workitemsbatch?api-version=7.1`;
+    const batchBody = {
+      ids: batchIds,
+      fields: [
+        'System.Id', 'System.Title', 'System.WorkItemType',
+        'System.State', 'System.Description',
+        'Microsoft.VSTS.Common.AcceptanceCriteria',
+        'System.Parent', 'System.AssignedTo',
+      ],
+      errorPolicy: 'omit',
+    };
+    const batchRes = await makeRequest(batchUrl, encodedPat, 'POST', batchBody);
+    if (batchRes.status !== 200) {
+      throw new Error(`Failed to batch fetch work item details: HTTP ${batchRes.status}`);
+    }
+
+    const batchData = JSON.parse(batchRes.body);
+    let items = (batchData.value || []).map((item) => {
+      const assignedTo = item.fields['System.AssignedTo'];
+      return {
+        id: item.id,
+        type: item.fields['System.WorkItemType'],
+        title: item.fields['System.Title'],
+        state: item.fields['System.State'],
+        description: stripHtml(item.fields['System.Description'] || ''),
+        acceptanceCriteria: stripHtml(item.fields['Microsoft.VSTS.Common.AcceptanceCriteria'] || ''),
+        parentId: item.fields['System.Parent'] || null,
+        assignedTo: assignedTo ? assignedTo.displayName : null,
+      };
+    });
+
+    // Filter to current user if --me
+    if (mine) {
+      const currentUser = await getAuthenticatedUser(cfg.org, encodedPat);
+      const myItemIds = new Set(items.filter(i => i.assignedTo === currentUser).map(i => i.id));
+      const myParentIds = new Set(items.filter(i => myItemIds.has(i.id) && i.parentId).map(i => i.parentId));
+      const myChildIds = new Set(items.filter(i => myItemIds.has(i.parentId)).map(i => i.id));
+      const allMyIds = new Set([...myItemIds, ...myParentIds, ...myChildIds]);
+      items = items.filter(i => allMyIds.has(i.id));
+    }
+
+    const lines = renderSprintBoard(sprint, items);
+    process.stdout.write(lines.join('\n') + '\n');
+    process.exit(0);
+  } catch (err) {
+    console.error(err.message);
+    process.exit(1);
+  }
+}
+
 // ─── Git / PR Helpers ───────────────────────────────────────────────────────────
 
 /**
@@ -1220,6 +1466,10 @@ async function main() {
     console.error('  create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body>');
     console.error('               Push branch and create a PR using gh CLI');
     console.error('               stdout: JSON {pr: "<url>", branch, base, pushed: bool}');
+    console.error('');
+    console.error('  show-sprint [--me]');
+    console.error('               Fetch sprint data and render colored board to stdout');
+    console.error('               --me: filter to items assigned to the authenticated user');
     process.exit(1);
   }
 
@@ -1270,9 +1520,13 @@ async function main() {
       await cmdCreatePr(cwd, cmdArgs);
       break;
 
+    case 'show-sprint':
+      await cmdShowSprint(cwd, cmdArgs);
+      break;
+
     default:
       console.error(`Unknown command: ${command}`);
-      console.error('Available commands: save-config, load-config, test, get-sprint, get-sprint-items, get-branch-links, update-description, update-state, get-child-states, create-branch, create-pr');
+      console.error('Available commands: save-config, load-config, test, get-sprint, get-sprint-items, get-branch-links, update-description, update-state, get-child-states, create-branch, create-pr, show-sprint');
       process.exit(1);
   }
 }
