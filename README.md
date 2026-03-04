@@ -7,13 +7,20 @@ Azure DevOps sprint integration for [Claude Code](https://docs.anthropic.com/en/
 1. **`/azdev-setup`** — Configure Azure DevOps credentials (org, project, PAT)
 2. **`/azdev-test`** — Verify your connection works
 3. **`/azdev-sprint`** — Display the current sprint backlog with stories, tasks, and metadata
-4. **`/azdev-analyze`** — The main pipeline:
+4. **`/azdev-analyze`** — The analysis pipeline:
    - Fetch your assigned stories
    - Resolve linked branches to local repos
+   - Analyze code changes on each branch
    - Verify your understanding of each story interactively
    - Generate PROJECT.md + ROADMAP.md + REQUIREMENTS.md per repo
    - Update story descriptions in Azure DevOps
    - Write task maps for status tracking
+5. **`/azdev-execute`** — The execution pipeline:
+   - Load task map from `/azdev-analyze`
+   - Set tasks to Active in Azure DevOps
+   - Work through the project plan (ROADMAP.md phases)
+   - Set tasks to Resolved when complete
+   - Optionally resolve parent story when all tasks are done
 
 ## Prerequisites
 
@@ -52,6 +59,8 @@ Credentials are stored in `.planning/azdev-config.json` (base64-encoded PAT). Ad
 ```
 /azdev-sprint          # View current sprint backlog
 /azdev-analyze         # Analyze stories and generate project plans
+/azdev-execute         # Execute a plan and update task status
+/azdev-execute 12345   # Execute a specific story by ID
 ```
 
 ## How it works
@@ -68,7 +77,8 @@ claude-azdev-skill/
 │   ├── azdev-setup.md         # /azdev-setup
 │   ├── azdev-test.md          # /azdev-test
 │   ├── azdev-sprint.md        # /azdev-sprint
-│   └── azdev-analyze.md       # /azdev-analyze
+│   ├── azdev-analyze.md       # /azdev-analyze
+│   └── azdev-execute.md       # /azdev-execute
 ├── LICENSE
 └── README.md
 ```
