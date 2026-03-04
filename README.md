@@ -83,24 +83,6 @@ claude-azdev-skill/
 └── README.md
 ```
 
-## Helper script CLI
-
-The helper can be used standalone:
-
-```bash
-node azdev-tools.cjs save-config --org <url> --project <name> --pat <token> --cwd <path>
-node azdev-tools.cjs load-config --cwd <path>
-node azdev-tools.cjs test --cwd <path>
-node azdev-tools.cjs get-sprint --cwd <path>
-node azdev-tools.cjs get-sprint-items [--me] --cwd <path>
-node azdev-tools.cjs get-branch-links --id <workItemId> --cwd <path>
-node azdev-tools.cjs update-state --id <workItemId> --state <state> --cwd <path>
-node azdev-tools.cjs update-description --id <workItemId> --description "<text>" --cwd <path>
-node azdev-tools.cjs get-child-states --id <storyId> --cwd <path>
-```
-
-All commands output JSON to stdout. Exit 0 = success, exit 1 = error.
-
 ## Security
 
 - PAT is base64-encoded (not encrypted) in `.planning/azdev-config.json`
