@@ -12,8 +12,8 @@
 
 ### Sprint Data
 
-- [ ] **SPRT-01**: System can fetch the current active sprint iteration from Azure DevOps
-- [ ] **SPRT-02**: System can fetch all user stories and tasks from the current sprint
+- [x] **SPRT-01**: System can fetch the current active sprint iteration from Azure DevOps
+- [x] **SPRT-02**: System can fetch all user stories and tasks from the current sprint
 - [ ] **SPRT-03**: User can view sprint backlog with title, description, acceptance criteria, and state
 
 ### Task Analysis
@@ -62,8 +62,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | API-01 | Phase 1 | Complete |
 | API-02 | Phase 1 | Complete |
-| SPRT-01 | Phase 2 | Pending |
-| SPRT-02 | Phase 2 | Pending |
+| SPRT-01 | Phase 2 | Complete |
+| SPRT-02 | Phase 2 | Complete |
 | SPRT-03 | Phase 2 | Pending |
 | ANAL-01 | Phase 3 | Pending |
 | ANAL-02 | Phase 3 | Pending |

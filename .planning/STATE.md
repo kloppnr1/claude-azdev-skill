@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-03-04T13:27:42.084Z"
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-03-04T14:01:38.501Z"
 last_activity: 2026-03-04 — Completed Plan 01-01 (azdo-tools.cjs)
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 4
+  completed_plans: 3
   percent: 0
 ---
 
@@ -52,6 +52,7 @@ Progress: [░░░░░░░░░░] 0%
 *Updated after each plan completion*
 | Phase 1 P1 | 4min | 2 tasks | 2 files |
 | Phase 01-foundation P02 | 30 | 2 tasks | 3 files |
+| Phase 02-sprint-data P01 | 3 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,9 @@ Recent decisions affecting current work:
 - [Phase 1]: azdo-tools.cjs test command verifies both vso.project scope (/_apis/projects) and vso.work scope (/_apis/wit/workitems) — 404 on work items is acceptable (auth OK)
 - [Phase 01-foundation]: Skill files in ~/.claude/commands/gsd/ (GSD infrastructure) not committed to project repo — consistent with all other GSD skills
 - [Phase 01-foundation]: normaliseOrg treats any https?:// prefixed input as full URL — covers dev.azure.com, *.visualstudio.com, and on-prem without special-casing
+- [Phase 02-01]: resolveTeamName step 1 uses status 200 + data.value !== undefined (not length > 0) — empty array valid when team exists but no sprint active
+- [Phase 02-01]: getSprintData shared helper avoids repeating config load + PAT encode + team resolve + iterations fetch in both commands
+- [Phase 02-01]: All unique IDs extracted from workItemRelations (both source and target) to capture parent stories and child tasks in sprint
 
 ### Pending Todos
 
@@ -79,6 +83,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-04T13:27:42.076Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-03-04T14:01:38.496Z
+Stopped at: Completed 02-01-PLAN.md
 Resume file: None

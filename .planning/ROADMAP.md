@@ -30,8 +30,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 01-01-PLAN.md — Create azdo-tools.cjs helper script (config management + HTTP client + connection test)
-- [ ] 01-02-PLAN.md — Create /gsd:azdo-setup and /gsd:azdo-test skill commands
+- [x] 01-01-PLAN.md — Create azdo-tools.cjs helper script (config management + HTTP client + connection test)
+- [x] 01-02-PLAN.md — Create /gsd:azdo-setup and /gsd:azdo-test skill commands
 
 ### Phase 2: Sprint Data
 **Goal**: User can view the current sprint backlog inside GSD
@@ -41,10 +41,11 @@ Plans:
   1. User can run a GSD skill command and see the active sprint name and iteration path fetched from Azure DevOps
   2. All user stories and tasks in the current sprint are listed with their title, description, acceptance criteria, and current state
   3. The backlog display is readable in a terminal context (no broken formatting)
-**Plans**: TBD
+**Plans:** 1/2 plans executed
 
 Plans:
-(TBD — populated during plan-phase)
+- [ ] 02-01-PLAN.md — Extend azdo-tools.cjs with get-sprint and get-sprint-items CLI commands
+- [ ] 02-02-PLAN.md — Create /gsd:azdo-sprint skill command for backlog display
 
 ### Phase 3: Analysis
 **Goal**: User can select a sprint task, map it to a local repo, and receive an AI technical breakdown
@@ -80,7 +81,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 2/2 | Complete   | 2026-03-04 |
-| 2. Sprint Data | 0/TBD | Not started | - |
+| 1. Foundation | 2/2 | Complete    | 2026-03-04 |
+| 2. Sprint Data | 1/2 | In Progress|  |
 | 3. Analysis | 0/TBD | Not started | - |
 | 4. Status | 0/TBD | Not started | - |
