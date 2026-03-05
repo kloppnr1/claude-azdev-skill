@@ -5,6 +5,7 @@ argument-hint: "<description of what to create>"
 allowed-tools:
   - Bash
   - AskUserQuestion
+  - Skill
 ---
 
 <objective>
@@ -99,10 +100,12 @@ For tasks under a story created in this batch, use the ID returned from the stor
 
 **Step 5 — Summary:**
 
-Display results:
+Display results with the story ID prominently shown:
 
 ```
-Created:
+╔══════════════════════════════════════════╗
+║  Story #42950 oprettet                   ║
+╚══════════════════════════════════════════╝
 
   ✓ #42950 [User Story] "Tilføj prisområde-kolonne til kundelisten"
     ✓ #42951 [Task] "Backend: Tilføj prisområde-felt til API response"
@@ -110,9 +113,20 @@ Created:
     ✓ #42953 [Task] "Test: Skriv tests for prisområde-logik"
 
 Sprint: Sprint 39 - 2026
-URLs:
-  https://verdo365.visualstudio.com/.../_workitems/edit/42950
+https://verdo365.visualstudio.com/.../_workitems/edit/42950
 ```
+
+**Step 6 — Offer to plan:**
+
+After displaying the summary, ask the user if they want to plan the story immediately.
+
+Use `AskUserQuestion`:
+- Question: "Vil du planlægge story #<id> nu?"
+- Options:
+  - "Ja, kør /devsprint-plan" — invoke the Skill tool with `devsprint-plan` and the story ID as argument
+  - "Nej" — done, stop here
+
+If the user chooses to plan: invoke `/devsprint-plan <storyId>` via the Skill tool.
 
 </process>
 
