@@ -81,6 +81,11 @@ Filter to top-level stories only:
 - Items where `type === "User Story"` AND (`parentId === null` OR `parentId` is not present in the items list).
 - Collect child tasks for each story: items where `parentId === storyId`.
 
+**Filter out completed stories:**
+- Remove stories where `state` is "Resolved", "Closed", or "Done".
+- If ALL stories are completed, display: "All your stories are already resolved. Nothing to plan." Stop.
+- In `singleStoryMode`: if the target story is completed, display: "Story #{targetStoryId} is already {state}. Nothing to plan." Stop.
+
 **Single-story filtering (if `singleStoryMode`):**
 - Find the item matching `targetStoryId` in the fetched items.
 - If the matching item is a Task (not a User Story), use its `parentId` to find the parent story. Process that parent story only.

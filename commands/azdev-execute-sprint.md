@@ -108,19 +108,27 @@ Display:
 
 Execute Steps 2a–2g below. If any step encounters a non-fatal error, log it and continue to the next step or next story. Collect the outcome in `sprintResults`.
 
-  **Step 2a — Load story spec:**
+  **Step 2a — Check story state:**
+
+  Run `node ~/.claude/bin/azdev-tools.cjs check-children --id {storyId} --cwd $CWD` and fetch the story's state from sprint items.
+
+  - If the story state is "Resolved", "Closed", or "Done": log "Story #{storyId} already resolved — skipping", record as "skipped — already resolved", continue to next story.
+  - If `allResolved === true`: log "All tasks for #{storyId} already resolved — skipping", record as "skipped — all tasks resolved", continue to next story.
+  - If some tasks are already resolved: note which ones. Only activate and work on the remaining tasks in subsequent steps.
+
+  **Step 2b — Load story spec:**
 
   1. Read `{repoPath}/.planning/stories/{storyId}.md`.
      If missing: log error "No story spec at {repoPath}/.planning/stories/{storyId}.md", record story as "skipped — no story spec", continue to next story.
 
-  **Step 2b — Create feature branch:**
+  **Step 2c — Create feature branch:**
 
   Run: `node ~/.claude/bin/azdev-tools.cjs create-branch --repo {repoPath} --story-id {storyId} --title "{storyTitle}"`
 
   - If exit 0: parse JSON. Store `branch` as `branchName` and `base` as `baseBranch`.
   - If exit 1: log error, record story as "skipped — branch creation failed", continue to next story.
 
-  **Step 2c — Activate tasks:**
+  **Step 2d — Activate tasks:**
 
   Track `activatedTaskIds` for this story.
 
@@ -131,7 +139,7 @@ Execute Steps 2a–2g below. If any step encounters a non-fatal error, log it an
 
   Brief status display.
 
-  **Step 2d — Execute the work:**
+  **Step 2e — Execute the work:**
 
   This is the main implementation phase. The story spec (`stories/{storyId}.md`) contains everything needed: goal, acceptance criteria, key files, implementation notes, and open questions. Do NOT re-analyze the codebase.
 
@@ -147,19 +155,19 @@ Execute Steps 2a–2g below. If any step encounters a non-fatal error, log it an
 
   IMPORTANT: Do NOT spend time exploring or understanding the codebase broadly. The `/azdev-plan` command already did that and wrote the story spec. Trust the spec. Only read files you are about to modify.
 
-  **Step 2e — Auto-resolve activated tasks:**
+  **Step 2f — Auto-resolve activated tasks:**
 
   For each task ID in `activatedTaskIds`:
   1. Run `node ~/.claude/bin/azdev-tools.cjs update-state --id {taskId} --state "Resolved" --cwd $CWD`
   2. Log result.
 
-  **Step 2f — Auto-resolve story:**
+  **Step 2g — Auto-resolve story:**
 
   Run `node ~/.claude/bin/azdev-tools.cjs get-child-states --id {storyId} --cwd $CWD`
   - If `allResolved === true`: resolve the story automatically.
   - If `allResolved === false`: log which tasks remain open.
 
-  **Step 2g — Push and create PR:**
+  **Step 2h — Push and create PR:**
 
   Build a PR body string with story info, changes summary, resolved tasks, and test plan checklist.
 

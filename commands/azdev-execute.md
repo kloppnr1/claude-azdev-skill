@@ -98,6 +98,17 @@ If no argument was passed:
 
 Store the selected mapping as `current`.
 
+**Step 2.5 — Check story state in Azure DevOps:**
+
+Run `node ~/.claude/bin/azdev-tools.cjs check-children --id {current.storyId} --cwd $CWD` to get the current state.
+
+Also fetch the story's own state from the sprint items:
+Run `node ~/.claude/bin/azdev-tools.cjs get-sprint-items --me --cwd $CWD` and find the item matching `current.storyId`.
+
+- If the story state is "Resolved", "Closed", or "Done": display "Story #{current.storyId} is already {state}. Nothing to execute." Stop.
+- If `allResolved === true` (all child tasks resolved): display "All tasks for story #{current.storyId} are already resolved. Nothing to execute." Stop.
+- If some tasks are already resolved: note which ones and only activate/work on the remaining tasks. Display: "Skipping {N} already resolved tasks. Working on {M} remaining."
+
 **Step 3 — Load story spec:**
 
 1. Read `{current.repoPath}/.planning/stories/{current.storyId}.md` using the Read tool.
