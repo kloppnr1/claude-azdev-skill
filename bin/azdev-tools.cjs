@@ -83,6 +83,17 @@
  *     --me: Filter to items assigned to the authenticated user.
  *     stdout: ANSI-colored sprint board text
  *     Exit 0 on success, exit 1 on error.
+ *
+ *   add-comment --id <workItemId> --text "<html>" [--cwd <path>]
+ *     Adds a comment (Discussion) to a work item using the Comments API.
+ *     The text field accepts HTML for rich formatting (headings, tables, lists).
+ *     stdout: JSON {"status":"created","id":N,"commentId":N}
+ *     Exit 0 on success, exit 1 on error.
+ *
+ *   delete-comment --id <workItemId> --comment-id <commentId> [--cwd <path>]
+ *     Deletes a comment from a work item.
+ *     stdout: JSON {"status":"deleted","id":N,"commentId":N}
+ *     Exit 0 on success, exit 1 on error.
  */
 
 'use strict';
@@ -1083,6 +1094,91 @@ function renderSprintBoard(sprint, items) {
 }
 
 /**
+ * Handles the add-comment command.
+ * Adds a comment (Discussion) to a work item using the Comments API.
+ * @param {string} cwd - Working directory
+ * @param {string[]} args - CLI args after the command name
+ */
+async function cmdAddComment(cwd, args) {
+  const idIdx = args.indexOf('--id');
+  const textIdx = args.indexOf('--text');
+  const id = idIdx !== -1 ? args[idIdx + 1] : null;
+  const text = textIdx !== -1 ? args[textIdx + 1] : null;
+
+  const missing = [];
+  if (!id) missing.push('--id');
+  if (!text) missing.push('--text');
+
+  if (missing.length > 0) {
+    console.error(`Missing required arguments: ${missing.join(', ')}`);
+    console.error('Usage: azdev-tools.cjs add-comment --id <workItemId> --text "<html>" [--cwd <path>]');
+    process.exit(1);
+  }
+
+  try {
+    const cfg = loadConfig(cwd);
+    const encodedPat = Buffer.from(':' + cfg.pat).toString('base64');
+
+    const commentUrl = `${cfg.org}/${cfg.project}/_apis/wit/workItems/${id}/comments?api-version=7.1-preview.4`;
+    const res = await makeRequest(commentUrl, encodedPat, 'POST', { text });
+
+    if (res.status === 200 || res.status === 201) {
+      const result = JSON.parse(res.body);
+      console.log(JSON.stringify({ status: 'created', id: Number(id), commentId: result.id }));
+      process.exit(0);
+    } else {
+      const errorBody = res.body ? JSON.parse(res.body) : {};
+      throw new Error(`Failed to add comment to work item ${id}: HTTP ${res.status} — ${errorBody.message || res.body}`);
+    }
+  } catch (err) {
+    console.error(err.message);
+    process.exit(1);
+  }
+}
+
+/**
+ * Handles the delete-comment command.
+ * Deletes a comment from a work item using the Comments API.
+ * @param {string} cwd - Working directory
+ * @param {string[]} args - CLI args after the command name
+ */
+async function cmdDeleteComment(cwd, args) {
+  const idIdx = args.indexOf('--id');
+  const commentIdx = args.indexOf('--comment-id');
+  const id = idIdx !== -1 ? args[idIdx + 1] : null;
+  const commentId = commentIdx !== -1 ? args[commentIdx + 1] : null;
+
+  const missing = [];
+  if (!id) missing.push('--id');
+  if (!commentId) missing.push('--comment-id');
+
+  if (missing.length > 0) {
+    console.error(`Missing required arguments: ${missing.join(', ')}`);
+    console.error('Usage: azdev-tools.cjs delete-comment --id <workItemId> --comment-id <commentId> [--cwd <path>]');
+    process.exit(1);
+  }
+
+  try {
+    const cfg = loadConfig(cwd);
+    const encodedPat = Buffer.from(':' + cfg.pat).toString('base64');
+
+    const deleteUrl = `${cfg.org}/${cfg.project}/_apis/wit/workItems/${id}/comments/${commentId}?api-version=7.1-preview.4`;
+    const res = await makeRequest(deleteUrl, encodedPat, 'DELETE');
+
+    if (res.status === 200 || res.status === 204) {
+      console.log(JSON.stringify({ status: 'deleted', id: Number(id), commentId: Number(commentId) }));
+      process.exit(0);
+    } else {
+      const errorBody = res.body ? (function() { try { return JSON.parse(res.body); } catch(e) { return {}; } })() : {};
+      throw new Error(`Failed to delete comment ${commentId} from work item ${id}: HTTP ${res.status} — ${errorBody.message || res.body}`);
+    }
+  } catch (err) {
+    console.error(err.message);
+    process.exit(1);
+  }
+}
+
+/**
  * Handles the show-sprint command.
  * Fetches sprint metadata and items from Azure DevOps, then renders
  * a colored terminal board. Single command — no intermediate JSON passing needed.
@@ -1562,6 +1658,15 @@ async function main() {
     console.error('               List Git repositories in the Azure DevOps project');
     console.error('               stdout: JSON array [{name, id, remoteUrl, lastPushDate}]');
     console.error('               --top: limit results (default: 20)');
+    console.error('');
+    console.error('  add-comment --id <workItemId> --text "<html>"');
+    console.error('               Add a comment (Discussion) to a work item');
+    console.error('               Text accepts HTML for rich formatting');
+    console.error('               stdout: JSON {status, id, commentId}');
+    console.error('');
+    console.error('  delete-comment --id <workItemId> --comment-id <commentId>');
+    console.error('               Delete a comment from a work item');
+    console.error('               stdout: JSON {status, id, commentId}');
     process.exit(1);
   }
 
@@ -1620,9 +1725,17 @@ async function main() {
       await cmdListRepos(cwd, cmdArgs);
       break;
 
+    case 'add-comment':
+      await cmdAddComment(cwd, cmdArgs);
+      break;
+
+    case 'delete-comment':
+      await cmdDeleteComment(cwd, cmdArgs);
+      break;
+
     default:
       console.error(`Unknown command: ${command}`);
-      console.error('Available commands: save-config, load-config, test, get-sprint, get-sprint-items, get-branch-links, update-description, update-state, get-child-states, create-branch, create-pr, show-sprint, list-repos');
+      console.error('Available commands: save-config, load-config, test, get-sprint, get-sprint-items, get-branch-links, update-description, update-state, get-child-states, create-branch, create-pr, show-sprint, list-repos, add-comment, delete-comment');
       process.exit(1);
   }
 }

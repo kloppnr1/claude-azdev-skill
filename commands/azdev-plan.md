@@ -47,6 +47,16 @@ azdev-tools.cjs CLI contracts:
     -> stdout: JSON array [{"name":"...","id":"...","remoteUrl":"...","lastPushDate":"..."}]
     -> Lists Git repositories in the Azure DevOps project
     -> exit 0 on success, exit 1 on error
+
+  node ~/.claude/bin/azdev-tools.cjs add-comment --id <workItemId> --text "<html>" --cwd $CWD
+    -> stdout: JSON {"status":"created","id":N,"commentId":N}
+    -> Adds a comment (Discussion) to a work item. Text accepts HTML for rich formatting.
+    -> exit 0 on success, exit 1 on error
+
+  node ~/.claude/bin/azdev-tools.cjs delete-comment --id <workItemId> --comment-id <commentId> --cwd $CWD
+    -> stdout: JSON {"status":"deleted","id":N,"commentId":N}
+    -> Deletes a comment from a work item.
+    -> exit 0 on success, exit 1 on error
 </context>
 
 <process>
@@ -448,9 +458,29 @@ STORY.md has been written to {repoPath}/.planning/stories/{storyId}.md
 
 Approve, request changes, or skip? (approve/changes/skip)"
 
-- If "approve": keep the file, move to next story.
+- If "approve": keep the file, post spec to Azure DevOps (Step 11.1), then move to next story.
 - If "changes": ask "What would you like to change?" then regenerate incorporating the feedback, and re-present for approval. Repeat until approved or skipped.
 - If "skip": delete the file. Note the skip in the final summary.
+
+**Step 11.1 — Post spec as Azure DevOps comment:**
+
+After a story is approved, post a **summary** of the STORY.md as an HTML-formatted comment on the work item in Azure DevOps. This makes the spec visible to team members in the Discussion tab.
+
+**Convert STORY.md to an HTML summary** for the comment. Do NOT dump the full markdown — create a clean, structured HTML version with:
+- `<h2>` for the story title
+- `<h3>` for sections (Goal, Acceptance Criteria, Key Files, Blocked Tasks, Out of Scope, Tasks)
+- `<ul>/<li>` for lists
+- `<table>` for the key files and tasks tables
+- `<code>` for file paths and code references
+- `<b>` for emphasis, `<i>` for metadata
+- Skip verbose sections (full Implementation Notes, Architecture details) — those live in the local STORY.md
+
+Run:
+```
+node ~/.claude/bin/azdev-tools.cjs add-comment --id {storyId} --text "{htmlSummary}" --cwd $CWD
+```
+
+If the comment post fails, warn the user but continue (non-blocking error). The local STORY.md is the source of truth.
 
 **Step 11.5 — Write azdev-task-map.json:**
 
