@@ -86,15 +86,19 @@ Defaults to showing only your assigned items (`--me`). Use `--all` to see the en
 
 ### `/azdev-plan [story-id]`
 
-The main analysis pipeline. Run without arguments to plan all assigned stories, or pass a story ID to plan a single story (e.g., `/azdev-plan 42920`). It:
+The main analysis pipeline. Run without arguments to plan all assigned stories, or pass a story ID to plan a single story (e.g., `/azdev-plan 42920`). Already resolved stories are automatically skipped.
 
-1. Fetches your assigned stories from the current sprint
-2. Shows Azure DevOps repos and asks which one each story belongs to
-3. Shows a summary (skipped in single-story mode)
-4. For each story, presents its analysis for your review and verification
-5. Updates story descriptions in Azure DevOps with the verified analysis
-6. Generates a story spec at `.planning/stories/{storyId}.md` in each target repo
-7. Writes/merges `.planning/azdev-task-map.json` — maps DevOps work item IDs to repos for status tracking
+**What it does, step by step:**
+
+1. **Fetch stories** — pulls your assigned stories from the current sprint via Azure DevOps API
+2. **Pick repos** — lists Azure DevOps project repos and asks which one each story belongs to. Resolves the local clone path automatically (scans sibling directories of `$CWD`)
+3. **Deep repo analysis** — for each story, searches the target repo for files matching story keywords, reads relevant code, traces call chains, and checks for existing feature branches
+4. **Interactive verification** — presents its understanding of each story (summary, work type, repo analysis, tasks) and asks you to confirm or correct. If the story description is sparse, asks targeted follow-up questions instead of guessing
+5. **Update Azure DevOps** — replaces the story description with the verified analysis (markdown format, revision history preserved)
+6. **Generate story spec** — writes `STORY.md` to `{repoPath}/.planning/stories/{storyId}.md` with: goal, background, testable acceptance criteria, key files with paths, architecture/code flow, implementation notes, contacts, open questions, and out-of-scope items
+7. **Self-review** — checks the generated spec against a quality checklist (specific goal, real file paths, traced code flow, no vague placeholders, blockers captured) and fixes issues before presenting
+8. **User approval** — shows the full spec for approve/changes/skip
+9. **Task map** — writes/merges `.planning/azdev-task-map.json` mapping story IDs → repos → task IDs for status tracking during execution
 
 ### `/azdev-execute [story-id]`
 
