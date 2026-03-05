@@ -105,8 +105,10 @@ Check if the user passed a story ID as argument (e.g., `/devsprint-execute 42920
 - If no argument: `mode = "all"`.
 
 **Behavioral rules by mode:**
-- `single` mode: interactive. Use `AskUserQuestion` when encountering blockers or ambiguity during implementation. Stop on errors.
-- `all` mode: fully autonomous. Do NOT use `AskUserQuestion` at any point. If you encounter a blocker on one story, log the error and move on to the next story. The user expects to walk away and come back to completed work.
+- `single` mode: interactive. The agent uses `AskUserQuestion` when encountering blockers or ambiguity during implementation. Stop on errors.
+- `all` mode: fully autonomous. The agent does NOT use `AskUserQuestion` at any point. If you encounter a blocker on one story, log the error and move on to the next story. The user expects to walk away and come back to completed work.
+
+**Context isolation:** In both modes, each story runs inside its own Agent to keep the main conversation lightweight and prevent context exhaustion. The orchestrator only handles pre-flight checks, agent launching, log writing, and the final summary.
 
 **Step 2 — Check prerequisites:**
 
@@ -222,8 +224,8 @@ Initialize an empty `executionResults` list to collect per-story outcomes.
 
 **Step 4 — Execute each story:**
 
-**CRITICAL — Context isolation in `all` mode:**
-In `all` mode, each story MUST be executed inside its own Agent (subagent_type: `general-purpose`) to prevent context window exhaustion. The orchestrator stays lightweight — it only launches agents and collects results.
+**CRITICAL — Context isolation (both modes):**
+Every story MUST be executed inside its own Agent (subagent_type: `general-purpose`) to prevent context window exhaustion in the main conversation. The orchestrator stays lightweight — it only launches agents and collects results. This applies to BOTH `all` and `single` mode.
 
 For each mapping in `storiesToExecute` (index `i`, starting at 1):
 
@@ -232,26 +234,25 @@ Display:
 ━━━ [{i}/{total}] Story #{storyId} — {storyTitle} ━━━
 ```
 
-**If `mode === "all"`:**
 Launch an Agent with the full execution instructions for this single story (Steps 4a–4h). The agent prompt must include:
 - The story mapping (storyId, storyTitle, repoPath, taskIds, taskTitles)
 - The path to the story spec: `{repoPath}/.planning/stories/{storyId}.md`
 - The path to the config: `$CWD/.planning/devsprint-config.json`
 - All devsprint-tools.cjs CLI contracts needed (update-state, get-child-states, create-branch, create-pr)
 - The TDD workflow (RED → GREEN → REFACTOR)
-- Instruction to NEVER use AskUserQuestion (autonomous mode)
 - Instruction to verify the FULL test suite passes BEFORE writing any code (baseline check on base branch). If tests fail, skip the story.
 - Instruction to run the FULL test suite (`dotnet test` / `npm test` / `pytest`) after all implementation — not just new tests. All tests must pass before resolving tasks.
 - Instruction to return a JSON summary: `{"storyId": N, "status": "completed|partial|skipped", "branch": "...", "prUrl": "...", "tasksResolved": [...], "tasksRemaining": [...], "testsPassed": N, "testsFailed": N, "testCommand": "...", "testSuiteStatus": "all passed|failures|no test infrastructure", "error": "..."}`
 
+**Mode-specific agent instructions:**
+- `all` mode: Include instruction to NEVER use `AskUserQuestion` — fully autonomous. On blockers, make best judgment and continue.
+- `single` mode: Include instruction to USE `AskUserQuestion` when encountering blockers or ambiguity — interactive mode. Stop on errors and consult the user via `AskUserQuestion`.
+
 Do NOT run agents in background — run them sequentially so each story completes before the next starts. Parse the agent's returned summary, add to `executionResults`, and **immediately write to the execution log** (Step 4i) before launching the next agent. This ensures progress is persisted even if a later story crashes or the session is interrupted.
 
-**If `mode === "single"`:**
-Execute Steps 4a–4h directly in the main conversation (no agent needed — interactive mode benefits from direct user communication).
+Steps 4a–4h below describe the work the agent performs:
 
-Steps 4a–4h below describe the work the agent (or main conversation in single mode) performs:
-
-Execute Steps 4a–4h below. In `all` mode (inside agent): if any step encounters a non-fatal error, log it and continue to the next step. In `single` mode: stop on errors and consult the user.
+Execute Steps 4a–4h below. In `all` mode: if any step encounters a non-fatal error, log it and continue to the next step. In `single` mode: stop on errors and consult the user via `AskUserQuestion`.
 
   **Step 4a — Check story state:**
 
