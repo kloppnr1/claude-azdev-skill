@@ -1,7 +1,7 @@
 ---
 name: azdev-sprint
 description: View current sprint backlog from Azure DevOps
-argument-hint: ""
+argument-hint: "[--all]"
 allowed-tools:
   - Bash
 ---
@@ -23,6 +23,7 @@ azdev-tools.cjs CLI contract used by this command:
   node ~/.claude/bin/azdev-tools.cjs show-sprint [--me] --cwd $CWD
     -> Fetches sprint metadata, fetches work items, renders colored board to stdout
     -> --me: filter to items assigned to the authenticated user
+    -> (no flag): shows all items in the sprint
     -> stdout: ANSI-colored sprint board (stories grouped with tasks, colored state indicators)
     -> exit 0 on success
     -> exit 1 on error (stderr contains message — e.g., no config, no active sprint, auth failure)
@@ -34,11 +35,12 @@ azdev-tools.cjs CLI contract used by this command:
    If missing: tell the user "Azure DevOps tools not installed. Check that ~/.claude/bin/azdev-tools.cjs exists." Stop.
 
 2. **Run the show-sprint command:**
-   Run: `node ~/.claude/bin/azdev-tools.cjs show-sprint --cwd $CWD`
-   That's it. The command handles everything: config loading, API calls, rendering.
 
-   If the user wants only their own items, use `--me`:
+   **Default (no argument or anything other than `--all`):** Show only the user's own items:
    Run: `node ~/.claude/bin/azdev-tools.cjs show-sprint --me --cwd $CWD`
+
+   **If the user passed `--all`:** Show the entire sprint:
+   Run: `node ~/.claude/bin/azdev-tools.cjs show-sprint --cwd $CWD`
 </process>
 
 <important>

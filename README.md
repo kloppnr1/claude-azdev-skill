@@ -1,26 +1,27 @@
 # claude-azdev-skill
 
-Azure DevOps sprint integration for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Connects your sprint backlog to your local repos — analyzes stories, reviews code on linked branches, generates project plans, executes work, and keeps Azure DevOps in sync.
+Azure DevOps sprint integration for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Connects your sprint backlog to your local repos — analyzes stories, generates project plans, executes work, and keeps Azure DevOps in sync.
 
 ## Quick overview
 
 ```
 /azdev-setup            →  Connect to Azure DevOps (one-time)
-/azdev-sprint           →  See your sprint backlog
-/azdev                  →  Analyze stories → resolve branches → review code → generate plans
+/azdev-sprint           →  See your sprint backlog (default: your items, --all for everything)
+/azdev-plan             →  Analyze stories → pick repos → verify → generate plans
+/azdev-plan 42920       →  Plan a single story by ID
 /azdev-execute          →  Execute one story → feature branch → PR to develop
 /azdev-execute-sprint   →  Execute ALL stories autonomously → zero interaction
 ```
 
 **The typical workflow:**
-1. Run `/azdev` — it finds your stories, checks out linked branches, analyzes the code, and generates project plans per repo
-2. Run `/azdev-execute` — it works through the plan, writes code, and updates Azure DevOps as tasks get done
+1. Run `/azdev-plan` — fetches your stories, asks which repo each belongs to, verifies your understanding, and generates project plans
+2. Run `/azdev-execute` — works through the plan, writes code, and updates Azure DevOps as tasks get done
 
 ## What it does
 
 1. **Connect** — Configure your Azure DevOps org, project, and Personal Access Token
 2. **View sprint** — Fetch the current sprint backlog with stories, tasks, descriptions, and acceptance criteria
-3. **Analyze** — Run `/azdev` to analyze stories, verify understanding with the user, update descriptions in Azure DevOps, and generate project plans (PROJECT.md + ROADMAP.md + REQUIREMENTS.md) in each target repo
+3. **Plan** — Run `/azdev-plan` to analyze stories, pick target repos, verify understanding with the user, update descriptions in Azure DevOps, and generate project plans (PROJECT.md + ROADMAP.md + REQUIREMENTS.md) in each target repo
 4. **Execute** — Navigate to target repos and implement. Task status updates (New → Active → Resolved) are tracked via `azdev-task-map.json`
 
 ## Prerequisites
@@ -31,7 +32,7 @@ Azure DevOps sprint integration for [Claude Code](https://docs.anthropic.com/en/
   - `vso.project` — read project/iteration data
   - `vso.work` — read work items
   - `vso.work_write` — update work item state
-  - `vso.code` — read Git repository info (for branch link resolution)
+  - `vso.code` — create pull requests via Azure DevOps REST API
 
 ## Installation
 
@@ -89,27 +90,27 @@ Fetches and displays the current sprint backlog with ANSI-colored state indicato
 - Tasks grouped under their parent story
 - State (blue=Active, green=Resolved, etc.), assigned user, and other metadata
 
-Supports `--me` flag to filter to your assigned items only.
+Defaults to showing only your assigned items (`--me`). Use `--all` to see the entire sprint.
 
-### `/azdev`
+### `/azdev-plan [story-id]`
 
-The main analysis pipeline. It:
+The main analysis pipeline. Run without arguments to plan all assigned stories, or pass a story ID to plan a single story (e.g., `/azdev-plan 42920`). It:
 
 1. Fetches your assigned stories from the current sprint
-2. Resolves branch links on each story to find the target repository
-3. Shows a summary: "You have N stories across M repos"
+2. Asks which local repo each story belongs to
+3. Shows a summary (skipped in single-story mode)
 4. For each story, presents its analysis for your review and verification
 5. Updates story descriptions in Azure DevOps with the verified analysis
 6. Generates PROJECT.md, ROADMAP.md, and REQUIREMENTS.md in each target repo
-7. Writes `.planning/azdev-task-map.json` — maps DevOps work item IDs to repos for status tracking
+7. Writes/merges `.planning/azdev-task-map.json` — maps DevOps work item IDs to repos for status tracking
 
 ### `/azdev-execute`
 
-Execute the project plan for a single story. Creates a **feature branch** from develop, sets tasks to **Active**, works through the ROADMAP.md phases, auto-resolves tasks and story when done, pushes the branch, and creates a **PR to develop**. Only asks for input when selecting between multiple stories or hitting implementation blockers.
+Execute the project plan for a single story. Creates a **feature branch** from develop, sets tasks to **Active**, works through the ROADMAP.md phases, auto-resolves tasks and story when done, pushes the branch, and creates a **PR to develop** via the Azure DevOps REST API. Only asks for input when selecting between multiple stories or hitting implementation blockers.
 
 ### `/azdev-execute-sprint`
 
-Fully autonomous mode — executes **all stories** in the task map sequentially without any user interaction. Each story gets its own feature branch and PR. Errors on one story don't block the next. Outputs a full sprint summary with all PR links at the end.
+Fully autonomous mode — executes **all stories** in the task map sequentially without any user interaction. Each story gets its own feature branch and PR (created via Azure DevOps REST API). Errors on one story don't block the next. Outputs a full sprint summary with all PR links at the end.
 
 ## Status tracking
 
@@ -137,9 +138,6 @@ node azdev-tools.cjs test --cwd <path>
 node azdev-tools.cjs get-sprint --cwd <path>
 node azdev-tools.cjs get-sprint-items [--me] --cwd <path>
 
-# Branch links (for repo resolution)
-node azdev-tools.cjs get-branch-links --id <workItemId> --cwd <path>
-
 # Work item updates
 node azdev-tools.cjs update-state --id <workItemId> --state <state> --cwd <path>
 node azdev-tools.cjs update-description --id <workItemId> --description "<text>" --cwd <path>
@@ -150,8 +148,8 @@ node azdev-tools.cjs get-child-states --id <storyId> --cwd <path>
 # Git branching
 node azdev-tools.cjs create-branch --repo <path> --story-id <id> --title <title> [--base <branch>]
 
-# Push and create PR
-node azdev-tools.cjs create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body>
+# Push and create PR (via Azure DevOps REST API, linked to story)
+node azdev-tools.cjs create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body> --story-id <id> --cwd <path>
 
 # Display sprint board (fetch + render in one command)
 node azdev-tools.cjs show-sprint [--me] --cwd <path>
@@ -169,7 +167,7 @@ claude-azdev-skill/
 │   ├── azdev-setup.md            # /azdev-setup — credential configuration
 │   ├── azdev-test.md             # /azdev-test — connection verification
 │   ├── azdev-sprint.md           # /azdev-sprint — sprint backlog display
-│   ├── azdev.md                  # /azdev — story analysis & project bootstrap pipeline
+│   ├── azdev-plan.md             # /azdev-plan — story analysis & project bootstrap
 │   ├── azdev-execute.md          # /azdev-execute — single story execution
 │   └── azdev-execute-sprint.md   # /azdev-execute-sprint — full sprint execution
 └── README.md

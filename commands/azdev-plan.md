@@ -1,7 +1,7 @@
 ---
-name: azdev
-description: Analyze sprint stories, verify with user, update descriptions, and bootstrap project plans in target repos
-argument-hint: ""
+name: azdev-plan
+description: Analyze and plan sprint stories — all assigned or a single story by ID
+argument-hint: "[story-id]"
 allowed-tools:
   - Read
   - Write
@@ -10,7 +10,9 @@ allowed-tools:
 ---
 
 <objective>
-Fetch assigned stories from the current Azure DevOps sprint, resolve their branch links to local repos, interactively verify each story with the user, update story descriptions in Azure DevOps, generate PROJECT.md + ROADMAP.md + REQUIREMENTS.md per target repo, and present each for user approval. Write azdev-task-map.json for status tracking during execution.
+Fetch assigned stories from the current Azure DevOps sprint, ask the user which repo each story belongs to, interactively verify each story with the user, update story descriptions in Azure DevOps, generate PROJECT.md + ROADMAP.md + REQUIREMENTS.md per target repo, and present each for user approval. Write azdev-task-map.json for status tracking during execution.
+
+If a story ID is provided as argument, only process that single story (skip multi-story summary, go straight to analysis).
 </objective>
 
 <execution_context>
@@ -35,12 +37,6 @@ azdev-tools.cjs CLI contracts:
     -> --me: filter to authenticated user's items (parent stories + child tasks)
     -> exit 0 on success, exit 1 on error
 
-  node ~/.claude/bin/azdev-tools.cjs get-branch-links --id <storyId> --cwd $CWD
-    -> stdout: JSON array [{ repositoryId, repositoryName, remoteUrl, branchName }]
-    -> Returns [] if no branch link found (not an error)
-    -> exit 0 on success, exit 1 on API error
-    -> Required PAT scopes: vso.work + vso.code
-
   node ~/.claude/bin/azdev-tools.cjs update-description --id <workItemId> --description "<html>" --cwd $CWD
     -> stdout: JSON {"status":"updated","id":N}
     -> Uses PATCH API with application/json-patch+json content type
@@ -49,6 +45,13 @@ azdev-tools.cjs CLI contracts:
 
 <process>
 
+**Step 0 — Parse arguments:**
+
+Check if the user passed a story ID as argument (e.g., `/azdev-plan 42920` or `/azdev-plan #42920`).
+- If a numeric ID is provided: set `singleStoryMode = true` and `targetStoryId = <the ID>`.
+- If no argument: set `singleStoryMode = false` (process all assigned stories).
+- If argument is a task ID (not a story), it will be resolved to its parent story in Step 3.
+
 **Step 1 — Check prerequisites:**
 
 1. Verify `~/.claude/bin/azdev-tools.cjs` exists via Bash `test -f ~/.claude/bin/azdev-tools.cjs`.
@@ -56,8 +59,6 @@ azdev-tools.cjs CLI contracts:
 
 2. Run `node ~/.claude/bin/azdev-tools.cjs load-config --cwd $CWD`.
    If exit 1: tell the user "No Azure DevOps config found. Run `/azdev-setup` to configure your connection." Stop.
-
-3. Note: The Git Repositories API (called internally by `get-branch-links`) requires the `vso.code` PAT scope in addition to `vso.work`. If step 4 (below) produces errors about repository lookup, advise the user to regenerate their PAT with `vso.code` scope added and re-run `/azdev-setup`.
 
 **Step 2 — Fetch sprint metadata:**
 
@@ -75,74 +76,78 @@ Filter to top-level stories only:
 - Items where `type === "User Story"` AND (`parentId === null` OR `parentId` is not present in the items list).
 - Collect child tasks for each story: items where `parentId === storyId`.
 
-Argument handling: If the user passed an argument to this skill (e.g., a task ID), find the item in the list and use its `parentId` to roll up to the parent story. Process that parent story (story-level only per locked decision).
+**Single-story filtering (if `singleStoryMode`):**
+- Find the item matching `targetStoryId` in the fetched items.
+- If the matching item is a Task (not a User Story), use its `parentId` to find the parent story. Process that parent story only.
+- If the matching item IS a User Story, process it directly.
+- If `targetStoryId` is not found in the sprint items, tell the user: "Story #{targetStoryId} not found in your current sprint items." Stop.
+- After filtering, continue with only this one story — skip Step 5 (multi-story summary) and go directly to Step 4.
 
-**Step 4 — Resolve branch links:**
+**Step 4 — Ask user for target repo per story:**
 
-For each top-level story (not child tasks), run:
-  `node ~/.claude/bin/azdev-tools.cjs get-branch-links --id {storyId} --cwd $CWD`
+For each story to process, ask the user which local repository it belongs to.
 
-- Parse the JSON array result.
-- If multiple branch links exist for a story, use the first one (Claude's discretion).
-- Group stories by target repo using `repositoryName`.
-- Track stories with an empty array (`[]`) separately as "no branch link".
+1. **Scan for known repos:** List git repos in the parent directory of `$CWD` by running:
+   `ls -d {parentDir}/*/.git 2>/dev/null | sed 's|/.git||' | xargs -I{} basename {}`
+   This gives a list of candidate repo names.
 
-**Step 4.5 — Code analysis per story:**
+2. **Check existing task map:** If `$CWD/.planning/azdev-task-map.json` exists, check if this story already has a `repoPath` mapping. If so, use it as the default suggestion.
 
-After resolving branch links and local repo paths, analyze the code changes for each story that has a branch link.
+3. **Ask the user** using `AskUserQuestion`:
+   - Question: "Which repo should story #{id} ({title}) be planned in?"
+   - Options: list the discovered repo names as options (max 4, prioritize repos already in the task map). The user can also type a custom path via "Other".
+   - If only one repo is found, still confirm with the user.
+
+4. **Resolve the local path:**
+   - If the user picks a repo name: use `{parentDir}/{repoName}` as the path.
+   - If the user provides a custom path: use that path.
+   - Verify the path exists and contains `.git` via Bash. If not, warn and re-ask.
+
+5. Store the resolved `repoPath` for this story. Continue to Step 4.5.
+
+**Step 4.5 — Repo analysis per story:**
+
+After resolving the target repo for each story, analyze the repo to understand the codebase.
 
 For each story with a resolved local repo path:
 
-1. **Switch to the target repo directory** and run `git fetch origin` to ensure branches are up to date.
+1. **Switch to the target repo directory** and look at the repo structure:
+   - Look at key directories, tech stack indicators (package.json, *.csproj, *.sln, etc.).
+   - Run `git branch -a` to see available branches.
 
-2. **Identify the branch**: use the `branchName` from step 4. Check it exists locally with `git branch --list {branchName}`. If not, run `git checkout -b {branchName} origin/{branchName}` or `git checkout {branchName}`.
+2. **Check for existing work:** Check if a feature branch for this story already exists:
+   - Run `git branch -a | grep -i {storyId}` to find branches matching the story ID.
+   - If a matching branch exists, get the diff against the default branch to see existing progress.
 
-3. **Get the diff against the default branch** (usually `main` or `master`):
-   - Detect default branch: `git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@'`. Fall back to `main`, then `master`.
-   - Run `git diff {defaultBranch}...{branchName} --stat` to get a summary of changed files.
-   - Run `git diff {defaultBranch}...{branchName} --name-only` to get the list of changed files.
-   - If the branch has no diff (identical to default branch), note "Branch exists but has no changes yet."
-
-4. **Analyze the changes**:
-   - Read the changed files (use the Read tool) to understand what the code changes do.
-   - If there are more than 10 changed files, focus on the most significant ones (largest diffs, core logic files over config/generated files).
-   - Look at the repo structure (key directories, tech stack indicators like package.json, *.csproj, etc.).
-
-5. **Produce a code analysis summary** for each story:
-   - **Files changed**: count and list of key files
+3. **Produce a repo analysis summary** for each story:
    - **Tech stack**: detected from repo (e.g., "C# / .NET", "TypeScript / React", "Python / FastAPI")
-   - **Architecture observations**: what patterns or layers are being modified (e.g., "API controller + service layer + DB migration")
-   - **Current progress**: estimate based on diff size and completeness (e.g., "scaffolding only", "partial implementation", "mostly complete")
-   - **Risks or concerns**: anything notable (e.g., "no tests added yet", "modifies shared utility", "large migration file")
+   - **Architecture observations**: key patterns or layers in the repo (e.g., "API controller + service layer + DB migration")
+   - **Existing branch**: if a feature branch for this story was found, note it and summarize progress
+   - **Risks or concerns**: anything notable (e.g., "large repo", "complex build setup")
 
-Store this code analysis per story — it is used in Step 5.5 for the interactive verification and in Steps 8-10 for project file generation.
+Store this analysis per story — it is used in Step 5.5 for the interactive verification and in Steps 8-10 for project file generation.
 
-**Step 5 — Show multi-repo summary and confirm:**
+**Step 5 — Show summary and confirm:**
+
+**Skip this step entirely if `singleStoryMode` is true.** Go directly to Step 5.5.
 
 Display summary in this format:
 ```
 === Analysis: {sprintName} ===
 
-You have {N} stories across {M} repos:
+You have {N} stories:
 
-Repo: {repoName} ({remoteUrl})
-  [US] #{id} -- {title} ({state})
-  [US] #{id} -- {title} ({state})
+  [US] #{id} -- {title} ({state}) → {repoName}
+  [US] #{id} -- {title} ({state}) → {repoName}
 
-Repo: {repoName} ({remoteUrl})
-  [US] #{id} -- {title} ({state})
-
-{K} story/stories have no branch link and will be skipped:
-  [US] #{id} -- {title} ({state})
-
-Proceed to analyze {N} stories across {M} repos? (yes/no)
+Proceed to analyze? (yes/no)
 ```
 
 Use `AskUserQuestion` tool for confirmation. If the user says "no" or anything other than "yes", stop with: "Analysis cancelled. No changes made."
 
 **Step 5.5 — Interactive verification per story:**
 
-For each story that has a branch link (not skipped), present the following to the user:
+For each story, present the following to the user:
 
 ```
 ### #{id} — {title} ({state})
@@ -152,12 +157,12 @@ For each story that has a branch link (not skipped), present the following to th
 
 **Work type:** [Code change / Manual/operational / Blocked]
 
-**Code analysis** (from Step 4.5):
-  Branch: {branchName}
-  Files changed: {count} ({list of key files})
+**Target repo:** {repoName} ({repoPath})
+
+**Repo analysis** (from Step 4.5):
   Tech stack: {detected tech stack}
-  Architecture: {what layers/patterns are being modified}
-  Progress: {estimate of current state}
+  Architecture: {key patterns/layers}
+  {If existing branch found: "Existing branch: {branchName} — {progress summary}"}
   {If risks/concerns: "Risks: {risks}"}
 
 **Tasks:**
@@ -194,22 +199,6 @@ node ~/.claude/bin/azdev-tools.cjs update-description --id {storyId} --descripti
 
 If update fails, warn the user but continue (non-blocking error). The verified understanding is still used locally for file generation.
 
-**Step 6 — For each target repo, resolve local path:**
-
-For each repo group:
-1. Extract repo name from `remoteUrl`: the last path segment of the URL (e.g., `RepoName` from `https://dev.azure.com/org/proj/_git/RepoName`).
-2. Determine the parent directory: the parent directory of `$CWD` (e.g., if `$CWD` is `C:/Users/sen.makj/source/repos/PlanningMe`, the parent is `C:/Users/sen.makj/source/repos/`).
-3. Check if `{parentDir}/{repoName}/.git` exists via Bash. If it does, use `{parentDir}/{repoName}` as the local path.
-4. If NOT found, use `AskUserQuestion`:
-   "Repo {repoName} not found locally at {expectedPath}. What would you like to do?
-   (1) Clone it to {expectedPath}
-   (2) Provide a different local path
-   (3) Skip this repo"
-
-   - If clone: run `git clone "{remoteUrl}" "{expectedPath}"` via Bash. If clone fails (non-zero exit), warn user and skip this repo. Continue with remaining repos.
-   - If different path: use the path the user provides.
-   - If skip: exclude this repo from generation.
-
 **Step 7 — Check for existing .planning/ in target repo:**
 
 For each repo that will be processed:
@@ -227,7 +216,7 @@ Use the `Write` tool to create `{repoPath}/.planning/PROJECT.md`. Ensure `.plann
 Map Azure DevOps fields to PROJECT.md sections:
 
 ```markdown
-# {repo.repositoryName}
+# {repoName}
 
 ## What This Is
 
@@ -259,22 +248,21 @@ This work is tracked as Azure DevOps story #{story.id}: "{story.title}".
 
 - Azure DevOps Story: #{story.id} -- {story.title}
 - Sprint: {sprintName}
-- Branch: {branchName} in {repo.repositoryName}
+- Target repo: {repoName}
 - State: {story.state}
 - Work type: {verified work type from Step 5.5}
 
-## Code Analysis
+## Repo Analysis
 
-{Code analysis summary from Step 4.5:}
+{Repo analysis summary from Step 4.5:}
 - **Tech stack**: {detected tech stack}
-- **Files changed**: {count} — {list of key changed files}
-- **Architecture**: {what patterns/layers are being modified}
-- **Progress**: {current state estimate}
+- **Architecture**: {key patterns/layers}
+- **Existing branch**: {branch info or "None"}
 - **Risks**: {any concerns, or "None identified"}
 
 ## Constraints
 
-- **Tech stack**: {detected tech stack from code analysis}
+- **Tech stack**: {detected tech stack from repo analysis}
 - **Auth**: Azure DevOps PAT for API access
 
 ## Key Decisions
@@ -284,7 +272,7 @@ This work is tracked as Azure DevOps story #{story.id}: "{story.title}".
 | (Defined during phase planning) | | |
 
 ---
-*Last updated: {today's date} after analysis via /azdev*
+*Last updated: {today's date} after analysis via /azdev-plan*
 ```
 
 Formatting rules:
@@ -347,7 +335,7 @@ Use the `Write` tool to create `{repoPath}/.planning/REQUIREMENTS.md`.
 Derive requirement IDs from acceptance criteria and child tasks. Format:
 
 ```markdown
-# Requirements: {repo.repositoryName}
+# Requirements: {repoName}
 
 ## Active Requirements
 
@@ -366,7 +354,7 @@ Derive requirement IDs from acceptance criteria and child tasks. Format:
 **Acceptance**: {same criterion text}
 
 ---
-*Generated from Azure DevOps sprint analysis via /azdev*
+*Generated from Azure DevOps sprint analysis via /azdev-plan*
 *Sprint: {sprintName}*
 *Story: #{story.id} -- {story.title}*
 ```
@@ -393,12 +381,19 @@ Approve, request changes, or skip? (approve/changes/skip)"
 
 **Step 11.5 — Write azdev-task-map.json:**
 
-After all repos have been processed (approved or skipped), write the task map for status tracking.
+After all repos have been processed (approved or skipped), update the task map for status tracking.
+
+**Merge behavior:** If `$CWD/.planning/azdev-task-map.json` already exists, read it first and merge:
+- Keep existing mappings for stories NOT being re-planned.
+- Add or replace mappings for the story/stories just processed.
+- Update `generatedAt` timestamp.
+
+If the file does not exist, create it fresh.
 
 For each **approved** repo, create a mapping entry:
 - `storyId`: the Azure DevOps story ID (number)
 - `storyTitle`: the story title
-- `repoPath`: the resolved local repo path
+- `repoPath`: the resolved local repo path (from Step 4)
 - `taskIds`: array of child task IDs that belong to this story
 - `taskTitles`: object mapping task ID (as string key) to task title
 
@@ -412,7 +407,7 @@ Write the complete map to `$CWD/.planning/azdev-task-map.json` using the Write t
 }
 ```
 
-If all repos were skipped (no approved entries), do NOT write the file.
+If all repos were skipped (no approved entries) and no existing file, do NOT write the file.
 
 This file is used for automatic Azure DevOps status updates during execution: tasks are identified by their IDs and can be transitioned New → Active → Resolved using `azdev-tools.cjs update-state`.
 
@@ -423,12 +418,10 @@ After processing all repos, display:
 === Analysis Complete ===
 
 Projects bootstrapped:
-  {repoName}: {repoPath}/.planning/ (approved)
-  {repoName}: {repoPath}/.planning/ (approved)
+  #{storyId} {storyTitle} → {repoName}: {repoPath}/.planning/ (approved)
 
 Skipped:
-  {repoName}: no branch link
-  {repoName}: user skipped
+  #{storyId} {storyTitle}: user skipped
 
 Task map written to: $CWD/.planning/azdev-task-map.json
 
@@ -437,7 +430,7 @@ Next steps:
   Use azdev-task-map.json to track and update task status in Azure DevOps.
 ```
 
-If multiple repos were approved, list each with its next step.
+If `singleStoryMode`: simplify the summary to just show the single story result.
 
 </process>
 
@@ -445,30 +438,30 @@ If multiple repos were approved, list each with its next step.
 
 **Common errors and responses:**
 
-- `get-branch-links` returns 403 for repository lookup: "The Git Repositories API requires the `vso.code` PAT scope. Please regenerate your PAT at https://dev.azure.com with `vso.code` added, then run `/azdev-setup` to update the config."
-
-- `git clone` fails: Warn the user with the error output, skip this repo, continue with remaining repos.
-
 - Story has no description: Generate "What This Is" with "(No description provided). This work is tracked as Azure DevOps story #{story.id}: \"{story.title}\"."
 
 - Story has no acceptance criteria AND no child tasks: Generate a single placeholder requirement: `- [ ] Implement story #{story.id}: {story.title}`.
 
 - Empty sprint or no assigned stories: Display "No stories assigned to you in the current sprint. Nothing to analyze."
 
+- Story ID not found (single-story mode): Display "Story #{targetStoryId} not found in your current sprint items. Run `/azdev-sprint` to see your assigned items."
+
+- Repo path does not exist or has no .git: Warn user and re-ask for repo.
+
 </error_handling>
 
 <success_criteria>
-- All assigned user stories are retrieved via get-sprint-items --me
-- Branch links resolve stories to target repos automatically (no manual mapping)
-- Code changes on each story's branch are analyzed (diff against default branch)
-- Multi-repo summary is shown before any file generation
+- Single-story mode: `/azdev-plan 42920` processes only story #42920 without multi-story summary
+- All-stories mode: `/azdev-plan` (no args) processes all assigned stories as before
+- Task/child ID argument resolves to parent story automatically
+- User is asked which repo each story belongs to (no automatic branch link resolution)
+- Repo choice is stored in azdev-task-map.json for use during execution
 - Each story is interactively verified with the user before file generation (Step 5.5)
 - Verified analysis replaces the story description in Azure DevOps (Step 5.6)
 - PROJECT.md, ROADMAP.md, and REQUIREMENTS.md use the verified understanding (not raw AzDO data)
 - Stories are correctly categorized by work type (code change vs manual/operational vs blocked)
 - User can approve or request changes per repo before files are finalized
-- Stories without branch links are listed but skipped gracefully with a message
 - No HTML artifacts appear in any generated file
-- azdev-task-map.json is written to $CWD/.planning/ with story-to-task mappings for all approved repos
+- azdev-task-map.json merges with existing entries (does not overwrite unrelated stories)
 - Task IDs in the map can be used to update status (New → Active → Resolved) during execution
 </success_criteria>

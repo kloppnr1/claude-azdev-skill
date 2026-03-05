@@ -71,9 +71,10 @@
  *     stdout: JSON {"branch":"...","base":"...","created":true|false}
  *     Exit 0 on success, exit 1 on error.
  *
- *   create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body>
- *     Pushes the branch to origin and creates a pull request using the gh CLI.
- *     stdout: JSON {"pr":"<url>","branch":"...","base":"...","pushed":true}
+ *   create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body> --story-id <id> --cwd <path>
+ *     Pushes the branch to origin and creates a pull request via Azure DevOps REST API.
+ *     Links the PR to the story when --story-id is provided.
+ *     stdout: JSON {"pr":"<url>","prId":N,"branch":"...","base":"...","pushed":true,"linked":true|false}
  *     Exit 0 on success, exit 1 on error.
  *
  *   show-sprint [--me] [--cwd <path>]
@@ -1319,19 +1320,19 @@ async function cmdCreateBranch(cwd, args) {
 
 /**
  * Handles the create-pr command.
- * Pushes the current branch and creates a PR to a base branch using the gh CLI.
+ * Pushes the current branch and creates a PR in Azure DevOps, linked to the story.
  *
  * Usage: azdev-tools.cjs create-pr --repo <path> --branch <name> --base <branch>
- *          --title <title> --body <body>
+ *          --title <title> --body <body> --story-id <id> --cwd <path>
  *
  * Steps:
  *   1. Push the branch to origin with -u
- *   2. Create a PR using gh pr create
+ *   2. Create a PR via Azure DevOps REST API (linked to story via workItemRefs)
  *
- * stdout: JSON {"pr":"https://...","branch":"...","base":"..."}
+ * stdout: JSON {"pr":"https://...","prId":N,"branch":"...","base":"..."}
  * Exit 0 on success, exit 1 on error.
  *
- * @param {string} cwd - Working directory (unused, repo path comes from --repo)
+ * @param {string} cwd - Working directory for loading Azure DevOps config
  * @param {string[]} args - CLI args
  */
 async function cmdCreatePr(cwd, args) {
@@ -1340,12 +1341,14 @@ async function cmdCreatePr(cwd, args) {
   const baseIdx = args.indexOf('--base');
   const titleIdx = args.indexOf('--title');
   const bodyIdx = args.indexOf('--body');
+  const storyIdx = args.indexOf('--story-id');
 
   const repo = repoIdx !== -1 ? args[repoIdx + 1] : null;
   const branch = branchIdx !== -1 ? args[branchIdx + 1] : null;
   const base = baseIdx !== -1 ? args[baseIdx + 1] : 'develop';
   const title = titleIdx !== -1 ? args[titleIdx + 1] : null;
   const body = bodyIdx !== -1 ? args[bodyIdx + 1] : '';
+  const storyId = storyIdx !== -1 ? args[storyIdx + 1] : null;
 
   const missing = [];
   if (!repo) missing.push('--repo');
@@ -1354,7 +1357,7 @@ async function cmdCreatePr(cwd, args) {
 
   if (missing.length > 0) {
     console.error(`Missing required arguments: ${missing.join(', ')}`);
-    console.error('Usage: azdev-tools.cjs create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body>');
+    console.error('Usage: azdev-tools.cjs create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body> --story-id <id> --cwd <path>');
     process.exit(1);
   }
 
@@ -1368,24 +1371,52 @@ async function cmdCreatePr(cwd, args) {
       process.exit(1);
     }
 
-    // Step 2: Create PR using gh CLI
-    // Escape title and body for shell safety
-    const safeTitle = title.replace(/'/g, "'\\''");
-    const safeBody = body.replace(/'/g, "'\\''");
-    const ghCmd = `gh pr create --base '${base}' --head '${branch}' --title '${safeTitle}' --body '${safeBody}'`;
-    const pr = run(ghCmd, repoPath);
+    // Step 2: Create PR via Azure DevOps REST API
+    const cfg = loadConfig(cwd);
+    const encodedPat = Buffer.from(':' + cfg.pat).toString('base64');
 
-    if (!pr.ok) {
-      // Push succeeded but PR creation failed — report but don't fail hard
-      console.error(`Branch pushed but PR creation failed: ${pr.error}`);
-      console.log(JSON.stringify({ pr: null, branch, base, pushed: true, error: pr.error }));
+    // Resolve repo name from git remote URL
+    const remoteUrl = run('git remote get-url origin', repoPath);
+    if (!remoteUrl.ok) {
+      console.error('Could not determine remote URL for repository');
       process.exit(1);
     }
+    const repoName = remoteUrl.stdout.split('/').pop().replace('.git', '');
 
-    // gh pr create outputs the PR URL on stdout
-    const prUrl = pr.stdout;
-    console.log(JSON.stringify({ pr: prUrl, branch, base, pushed: true }));
-    process.exit(0);
+    // Build PR request body
+    const prBody = {
+      sourceRefName: `refs/heads/${branch}`,
+      targetRefName: `refs/heads/${base}`,
+      title: title,
+      description: body || '',
+    };
+
+    // Link to story if story-id provided
+    if (storyId) {
+      prBody.workItemRefs = [{ id: storyId }];
+    }
+
+    const prUrl = `${cfg.org}/${encodeURIComponent(cfg.project)}/_apis/git/repositories/${encodeURIComponent(repoName)}/pullrequests?api-version=7.1`;
+    const prRes = await makeRequest(prUrl, encodedPat, 'POST', prBody);
+
+    if (prRes.status === 201 || prRes.status === 200) {
+      const prData = JSON.parse(prRes.body);
+      const webUrl = `${cfg.org}/${encodeURIComponent(cfg.project)}/_git/${encodeURIComponent(repoName)}/pullRequest/${prData.pullRequestId}`;
+      console.log(JSON.stringify({
+        pr: webUrl,
+        prId: prData.pullRequestId,
+        branch,
+        base,
+        pushed: true,
+        linked: !!storyId
+      }));
+      process.exit(0);
+    } else {
+      const errBody = prRes.body ? JSON.parse(prRes.body) : {};
+      console.error(`Branch pushed but PR creation failed: HTTP ${prRes.status} — ${errBody.message || prRes.body}`);
+      console.log(JSON.stringify({ pr: null, branch, base, pushed: true, error: errBody.message || `HTTP ${prRes.status}` }));
+      process.exit(1);
+    }
   } catch (err) {
     console.error(err.message);
     process.exit(1);
@@ -1463,9 +1494,10 @@ async function main() {
     console.error('               Stashes dirty changes, fetches base, creates feature/<id>-<slug>');
     console.error('               stdout: JSON {branch, base, created: bool}');
     console.error('');
-    console.error('  create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body>');
-    console.error('               Push branch and create a PR using gh CLI');
-    console.error('               stdout: JSON {pr: "<url>", branch, base, pushed: bool}');
+    console.error('  create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body> --story-id <id>');
+    console.error('               Push branch and create a PR via Azure DevOps REST API');
+    console.error('               Links PR to story when --story-id is provided');
+    console.error('               stdout: JSON {pr: "<url>", prId: N, branch, base, pushed: bool, linked: bool}');
     console.error('');
     console.error('  show-sprint [--me]');
     console.error('               Fetch sprint data and render colored board to stdout');

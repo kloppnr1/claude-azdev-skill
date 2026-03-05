@@ -44,9 +44,9 @@ azdev-tools.cjs CLI contracts used by this command:
     -> stdout: JSON {"branch":"...","base":"...","created":true|false}
     -> exit 0 on success, exit 1 on error
 
-  node ~/.claude/bin/azdev-tools.cjs create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body>
-    -> Pushes branch to origin, creates PR using gh CLI
-    -> stdout: JSON {"pr":"<url>","branch":"...","base":"...","pushed":true}
+  node ~/.claude/bin/azdev-tools.cjs create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body> --story-id <id> --cwd $CWD
+    -> Pushes branch to origin, creates PR via Azure DevOps REST API, links to story
+    -> stdout: JSON {"pr":"<url>","prId":N,"branch":"...","base":"...","pushed":true,"linked":true|false}
     -> exit 0 on success, exit 1 on error
 
 azdev-task-map.json structure (written by /azdev-analyze):
@@ -148,7 +148,7 @@ Execute Steps 2a–2g below. If any step encounters a non-fatal error, log it an
   5. On blockers: make your best judgment call and proceed. Log any assumptions made. Do NOT ask the user.
   6. Commit after meaningful chunks. Use descriptive messages: "feat: {description} (#{storyId})".
 
-  IMPORTANT: Do NOT spend time exploring or understanding the codebase broadly. The `/azdev` command already did that and wrote the project plans. Trust the plans. Only read files you are about to modify.
+  IMPORTANT: Do NOT spend time exploring or understanding the codebase broadly. The `/azdev-plan` command already did that and wrote the project plans. Trust the plans. Only read files you are about to modify.
 
   **Step 2e — Auto-resolve activated tasks:**
 
@@ -166,7 +166,7 @@ Execute Steps 2a–2g below. If any step encounters a non-fatal error, log it an
 
   Build a PR body string with story info, changes summary, resolved tasks, and test plan checklist.
 
-  Run: `node ~/.claude/bin/azdev-tools.cjs create-pr --repo {repoPath} --branch {branchName} --base {baseBranch} --title "#{storyId} {storyTitle}" --body "{prBody}"`
+  Run: `node ~/.claude/bin/azdev-tools.cjs create-pr --repo {repoPath} --branch {branchName} --base {baseBranch} --title "#{storyId} {storyTitle}" --body "{prBody}" --story-id {storyId} --cwd $CWD`
 
   - If exit 0: parse JSON. Store `pr` URL in `sprintResults`.
   - If exit 1: log error. Record "PR not created" and move on.
@@ -217,7 +217,7 @@ Next steps:
 - Missing PROJECT.md: Skip the story. Record as "skipped — no project plan".
 - Git errors (dirty tree, missing branch, merge conflicts): Attempt `git stash`, retry. If still failing, skip the story and record the error.
 - `update-state` failures: Log and continue. Non-blocking.
-- `gh pr create` failure: Log error. Branch is already pushed, so record "PR not created" and move on.
+- PR creation failure: Log error. Branch is already pushed, so record "PR not created" and move on.
 - Implementation blockers: Make best-effort judgment. Log assumptions. Do NOT stop to ask.
 - Repo path doesn't exist: Skip the story. Record as "skipped — repo not found at {path}".
 

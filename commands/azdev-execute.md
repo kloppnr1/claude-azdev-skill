@@ -46,9 +46,9 @@ azdev-tools.cjs CLI contracts used by this command:
     -> stdout: JSON {"branch":"...","base":"...","created":true|false}
     -> exit 0 on success, exit 1 on error
 
-  node ~/.claude/bin/azdev-tools.cjs create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body>
-    -> Pushes branch to origin, creates PR using gh CLI
-    -> stdout: JSON {"pr":"<url>","branch":"...","base":"...","pushed":true}
+  node ~/.claude/bin/azdev-tools.cjs create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body> --story-id <id> --cwd $CWD
+    -> Pushes branch to origin, creates PR via Azure DevOps REST API, links to story
+    -> stdout: JSON {"pr":"<url>","prId":N,"branch":"...","base":"...","pushed":true,"linked":true|false}
     -> exit 0 on success, exit 1 on error
 
 azdev-task-map.json structure (written by /azdev-analyze):
@@ -155,7 +155,7 @@ This is the main implementation phase. The analysis is ALREADY DONE — PROJECT.
 
 6. **Commit changes**: After meaningful chunks of work, commit changes via git. Use descriptive commit messages referencing the story ID (e.g., "feat: implement API endpoint for #{storyId}"). Do NOT ask the user — just commit directly on the feature branch.
 
-IMPORTANT: Do NOT spend time exploring or understanding the codebase broadly. The `/azdev` command already did that analysis and wrote the project plans. Trust the plans. Only read files that you are about to modify.
+IMPORTANT: Do NOT spend time exploring or understanding the codebase broadly. The `/azdev-plan` command already did that analysis and wrote the project plans. Trust the plans. Only read files that you are about to modify.
 
 **Step 7 — Auto-resolve activated tasks:**
 
@@ -211,10 +211,10 @@ Build a PR body string containing:
 - [ ] Code review
 ```
 
-Run: `node ~/.claude/bin/azdev-tools.cjs create-pr --repo {current.repoPath} --branch {current.branchName} --base {current.baseBranch} --title "#{current.storyId} {current.storyTitle}" --body "{prBody}"`
+Run: `node ~/.claude/bin/azdev-tools.cjs create-pr --repo {current.repoPath} --branch {current.branchName} --base {current.baseBranch} --title "#{current.storyId} {current.storyTitle}" --body "{prBody}" --story-id {current.storyId} --cwd $CWD`
 
-- If exit 0: parse JSON. Store `pr` URL for the summary.
-- If exit 1: warn user. The branch may already be pushed — suggest creating PR manually.
+- If exit 0: parse JSON. Store `pr` URL for the summary. PR is automatically linked to the story.
+- If exit 1: warn user. The branch may already be pushed — suggest creating PR manually in Azure DevOps.
 
 **Step 10 — Final summary:**
 
@@ -260,7 +260,7 @@ Next steps:
 
 - `develop` branch does not exist on remote: Warn the user. Ask if they want to target a different base branch (e.g., `main`).
 
-- `gh pr create` fails: Warn user with error. The branch is already pushed, so suggest creating the PR manually in the browser.
+- PR creation fails: Warn user with error. The branch is already pushed, so suggest creating the PR manually in Azure DevOps.
 
 </error_handling>
 
