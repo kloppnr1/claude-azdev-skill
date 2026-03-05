@@ -33,7 +33,8 @@ azdev-tools.cjs CLI contracts:
     -> exit 0 on success, exit 1 on error
 
   node ~/.claude/bin/azdev-tools.cjs get-sprint-items --me --cwd $CWD
-    -> stdout: JSON array [{id, type, title, state, description, acceptanceCriteria, parentId, assignedTo}]
+    -> stdout: JSON array [{id, type, title, state, description, acceptanceCriteria, parentId, assignedTo, tags}]
+    -> tags: array of strings (e.g., ["research", "blocked"])
     -> --me: filter to authenticated user's items (parent stories + child tasks)
     -> exit 0 on success, exit 1 on error
 
@@ -93,6 +94,13 @@ Filter to top-level stories only:
 - If `targetStoryId` is not found in the sprint items, tell the user: "Story #{targetStoryId} not found in your current sprint items." Stop.
 - After filtering, continue with only this one story — skip Step 5 (multi-story summary) and go directly to Step 4.
 
+**Story mode detection:**
+
+For each story, check its `tags` array (case-insensitive). If tags include `"research"`, mark the story as `researchMode = true`. This affects Steps 4.5, 5.5, and 8:
+- **Deeper analysis** — read more broadly in the repo, explore related systems and patterns, not just files matching keywords
+- **More user involvement** — ask exploratory questions to understand the problem space before converging on a solution
+- **Spec format** — STORY.md includes a "Research Findings" section and the acceptance criteria focus on what to investigate/document rather than what to build
+
 **Step 4 — Ask user for target repo per story:**
 
 For each story to process, ask the user which Azure DevOps repository it belongs to.
@@ -131,6 +139,13 @@ For each story with a resolved local repo path:
    - For each match: **read the file** (or relevant section) to understand what it does and how it relates to the story.
    - Follow imports and references to map the relevant code flow (e.g., Controller → Service → Repository).
    - Goal: identify the **specific files that will need changes**, not just the general architecture.
+
+   **If `researchMode`:** go broader — don't just search for story keywords:
+   - Explore related subsystems, similar patterns already in the codebase, and adjacent features
+   - Read config files, database schemas, API contracts, and test files to understand the full picture
+   - Look at git log for recent changes in related areas (`git log --oneline -20 -- {relevant paths}`)
+   - Document alternative approaches you discover (e.g., "there's already a similar pattern in X that could be reused")
+   - Goal: build a **comprehensive understanding** of the problem space, not just find files to edit
 
 3. **Check for existing work:** Check if a feature branch for this story already exists:
    - Run `git branch -a | grep -i {storyId}` to find branches matching the story ID.
@@ -205,6 +220,38 @@ I need more detail to write a good spec for #{id}:
 
 Only proceed to confirmation when you have enough detail for every STORY.md section.
 
+**If `researchMode`:** replace the standard verification with a deeper research dialogue. This is a multi-round conversation, not a single confirm/deny:
+
+1. **Present research findings** from the broader repo analysis (Step 4.5):
+   ```
+   ### #{id} — {title} (research)
+
+   **Problem space:**
+   {What the story is asking to investigate/solve — framed as questions, not solutions}
+
+   **What I found in the codebase:**
+   - {Finding 1: e.g., "There's already a PriceAreaService but it hardcodes DK1 for all customers"}
+   - {Finding 2: e.g., "The PostalCode table has a Region column but it's always NULL"}
+   - {Finding 3: e.g., "Similar logic exists in BillingService for tax zone lookup"}
+
+   **Possible approaches:**
+   - A: {approach + pros/cons}
+   - B: {approach + pros/cons}
+   - C: {approach + pros/cons}
+
+   **Open questions I can't answer from code alone:**
+   - {e.g., "Is the postal code → price area mapping maintained externally or should it be in the DB?"}
+   - {e.g., "Should this affect existing contracts or only new ones?"}
+   ```
+
+2. **Ask the user to react**: "Which approach makes sense? What am I missing? Are there constraints I should know about?"
+
+3. **Iterate**: based on user feedback, refine the understanding. Do additional code analysis if the user points you in a new direction. Repeat until the user says the understanding is solid.
+
+4. **Converge**: summarize the agreed approach and confirm before moving to spec generation.
+
+The goal is to **explore the problem together** before committing to a plan. Research stories often don't have clear requirements upfront — the plan process IS the requirements process.
+
 Use `AskUserQuestion` with:
 - Question: "Is this understanding correct for #{id}?"
 - Options: "Yes" / "No, let me correct it"
@@ -261,7 +308,7 @@ This is the single source of truth for the story — designed to be readable by 
 ```markdown
 # #{story.id} — {story.title}
 
-> **Sprint**: {sprintName} | **Repo**: {repoName} | **Type**: {work type} | **State**: {story.state}
+> **Sprint**: {sprintName} | **Repo**: {repoName} | **Type**: {work type} | **State**: {story.state} {If researchMode: "| **Tags**: research"}
 
 ## Goal
 
@@ -275,9 +322,28 @@ This is the single source of truth for the story — designed to be readable by 
 - Any prior work or existing functionality that this builds on
 - Key domain concepts a developer needs to understand
 
+{If researchMode, include this section — otherwise skip:}
+## Research Findings
+
+{Summary of the research dialogue from Step 5.5. This captures what was discovered and decided.}
+
+### Problem Analysis
+- {Key insight about the problem space}
+- {What was unclear and how it was resolved}
+
+### Approaches Considered
+- **{Approach A}**: {description} — {why chosen / why rejected}
+- **{Approach B}**: {description} — {why chosen / why rejected}
+
+### Agreed Approach
+{The approach the user confirmed during the research dialogue. This is what the implementation should follow.}
+
+{End of research-only section}
+
 ## Acceptance Criteria
 
 {Derived from story.acceptanceCriteria AND child tasks. Each criterion must be specific and testable.}
+{If researchMode: criteria focus on what to investigate, document, or prototype — e.g., "Document the mapping between postal codes and price areas" or "Prototype approach A and measure performance"}
 
 - [ ] {Specific, testable criterion — e.g., "PDFs are uploaded to blob path {dataareaid}/{accountnum}/{filename}"}
 - [ ] {Another criterion — e.g., "Upload covers invoices from {date range}"}

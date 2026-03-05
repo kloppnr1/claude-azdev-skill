@@ -524,6 +524,7 @@ async function cmdGetSprintItems(cwd, args) {
         'Microsoft.VSTS.Common.AcceptanceCriteria',
         'System.Parent',
         'System.AssignedTo',
+        'System.Tags',
       ],
       errorPolicy: 'omit',
     };
@@ -547,6 +548,7 @@ async function cmdGetSprintItems(cwd, args) {
         acceptanceCriteria: stripHtml(item.fields['Microsoft.VSTS.Common.AcceptanceCriteria'] || ''),
         parentId: item.fields['System.Parent'] || null,
         assignedTo: assignedTo ? assignedTo.displayName : null,
+        tags: item.fields['System.Tags'] ? item.fields['System.Tags'].split('; ') : [],
       };
     });
 
@@ -1143,6 +1145,7 @@ async function cmdShowSprint(cwd, args) {
         'System.State', 'System.Description',
         'Microsoft.VSTS.Common.AcceptanceCriteria',
         'System.Parent', 'System.AssignedTo',
+        'System.Tags',
       ],
       errorPolicy: 'omit',
     };
@@ -1163,6 +1166,7 @@ async function cmdShowSprint(cwd, args) {
         acceptanceCriteria: stripHtml(item.fields['Microsoft.VSTS.Common.AcceptanceCriteria'] || ''),
         parentId: item.fields['System.Parent'] || null,
         assignedTo: assignedTo ? assignedTo.displayName : null,
+        tags: item.fields['System.Tags'] ? item.fields['System.Tags'].split('; ') : [],
       };
     });
 
