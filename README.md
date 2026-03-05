@@ -114,13 +114,24 @@ The main analysis pipeline. Run without arguments to plan all assigned stories, 
 2. **Pick repos** — lists Azure DevOps project repos and asks which one each story belongs to. Resolves the local clone path automatically (scans sibling directories of `$CWD`)
 3. **Deep repo analysis** — for each story, searches the target repo for files matching story keywords, reads relevant code, traces call chains, and checks for existing feature branches
 4. **Interactive verification** — presents its understanding of each story (summary, work type, repo analysis, tasks) and asks you to confirm or correct. If the story description is sparse, asks targeted follow-up questions instead of guessing
-5. **Update Azure DevOps** — replaces the story description with the verified analysis (revision history preserved)
+5. **Update Azure DevOps** — replaces the story description and acceptance criteria with the verified analysis (see warning below)
 6. **Generate story spec** — writes `STORY.md` to `{repoPath}/.planning/stories/{storyId}.md` with: goal, background, testable acceptance criteria, key files with paths, architecture/code flow, implementation notes, contacts, open questions, and out-of-scope items
 7. **Self-review** — checks the generated spec against a quality checklist (specific goal, real file paths, traced code flow, no vague placeholders, blockers captured) and fixes issues before presenting
 8. **User approval** — shows the full spec for approve/changes/skip
-9. **Task map** — writes/merges `.planning/devsprint-task-map.json` mapping story IDs → repos → task IDs for status tracking during execution
+9. **Post to Azure DevOps** — adds a summary of the approved spec as a comment on the story
+10. **Task map** — writes/merges `.planning/devsprint-task-map.json` mapping story IDs → repos → task IDs for status tracking during execution
+
+> **Warning: Azure DevOps fields are overwritten.** By default, `/devsprint-plan` **replaces** the Description and Acceptance Criteria fields on each story with its verified analysis. Azure DevOps keeps revision history, so nothing is lost — but the original text is no longer visible without checking the history. If you want to keep the original fields untouched, add `--no-devops-update` to skip all Azure DevOps writes (description, acceptance criteria, and comments). The local STORY.md spec is still generated.
 
 **Research mode:** Stories tagged with `research` in Azure DevOps get a deeper treatment — broader codebase exploration, a multi-round dialogue where you discuss findings and possible approaches together, and a STORY.md that includes a "Research Findings" section with problem analysis, approaches considered, and the agreed approach.
+
+### `/devsprint-pr-fix <story-id>`
+
+Fix PR review comments. Takes a story ID, finds the matching PR automatically (by title prefix `#{storyId}`), fetches active review comments, checks out the PR branch, and fixes the issues.
+
+```
+/devsprint-pr-fix 42917
+```
 
 ### `/devsprint-execute [story-id]`
 
@@ -165,6 +176,11 @@ node devsprint-tools.cjs delete-comment --id <workItemId> --comment-id <commentI
 node devsprint-tools.cjs create-branch --repo <path> --story-id <id> --title <title> [--base <branch>]
 node devsprint-tools.cjs create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body> --story-id <id> --cwd <path>
 
+# Pull requests
+node devsprint-tools.cjs find-pr --story-id <id> --cwd <path>              # Find PR by story ID (searches all repos)
+node devsprint-tools.cjs get-pr --pr-id <id> [--repo-name <name>] --cwd <path>  # Fetch PR details
+node devsprint-tools.cjs get-pr-threads --pr-id <id> [--repo-name <name>] [--active-only] --cwd <path>
+
 # Repositories
 node devsprint-tools.cjs list-repos [--top <N>] --cwd <path>
 node devsprint-tools.cjs get-branch-links --id <workItemId> --cwd <path>
@@ -185,7 +201,8 @@ claude-devsprint-plugin/
 │   ├── devsprint-sprint.md           # /devsprint-sprint — sprint backlog display
 │   ├── devsprint-create.md           # /devsprint-create — create stories & tasks
 │   ├── devsprint-plan.md             # /devsprint-plan — story analysis & spec generation
-│   └── devsprint-execute.md          # /devsprint-execute — story execution & PR creation
+│   ├── devsprint-execute.md          # /devsprint-execute — story execution & PR creation
+│   └── devsprint-pr-fix.md           # /devsprint-pr-fix — fix PR review comments
 └── README.md
 ```
 

@@ -73,6 +73,10 @@ Check if the user passed a story ID as argument (e.g., `/devsprint-plan 42920` o
 - If no argument: set `singleStoryMode = false` (process all assigned stories).
 - If argument is a task ID (not a story), it will be resolved to its parent story in Step 3.
 
+Check for the `--no-devops-update` flag in the arguments:
+- If present: set `skipDevOpsUpdate = true`. This skips ALL writes to Azure DevOps (description, acceptance criteria, and comments). The local STORY.md spec is still generated normally.
+- If not present: set `skipDevOpsUpdate = false` (default — Azure DevOps fields are updated).
+
 **Step 1 — Check prerequisites:**
 
 1. Verify `~/.claude/bin/devsprint-tools.cjs` exists via Bash `test -f ~/.claude/bin/devsprint-tools.cjs`.
@@ -277,6 +281,8 @@ If "No, let me correct it": ask "What is the correct understanding?" as a free-t
 The verified understanding per story is used in later steps for project file generation.
 
 **Step 5.6 — Update story description in Azure DevOps:**
+
+**If `skipDevOpsUpdate === true`: skip this entire step.**
 
 For each verified story, **replace** the description with the verified analysis. Azure DevOps keeps revision history, so the original description is not lost.
 
@@ -491,6 +497,8 @@ Approve, request changes, or skip? (approve/changes/skip)"
 - If "skip": delete the file. Note the skip in the final summary.
 
 **Step 11.1 — Post spec as Azure DevOps comment:**
+
+**If `skipDevOpsUpdate === true`: skip this entire step.**
 
 After a story is approved, post a **summary** of the STORY.md as an HTML-formatted comment on the work item in Azure DevOps. This makes the spec visible to team members in the Discussion tab.
 
