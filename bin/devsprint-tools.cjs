@@ -189,16 +189,16 @@ function loadConfig(cwd) {
   const decoded = Buffer.from(cfg.pat, 'base64').toString('utf-8');
   const rawPat = decoded.startsWith(':') ? decoded.slice(1) : decoded;
 
-  return { org: cfg.org, project: cfg.project, pat: rawPat, team: cfg.team || null };
+  return { org: cfg.org, project: cfg.project, pat: rawPat, team: cfg.team || null, area: cfg.area || null };
 }
 
 /**
  * Saves Azure DevOps config to .planning/devsprint-config.json.
  * Normalizes org URL to slug, encodes PAT as base64 with leading colon.
  * @param {string} cwd - Working directory (project root)
- * @param {{org: string, project: string, pat: string, team?: string}} config - Config values (raw PAT)
+ * @param {{org: string, project: string, pat: string, team?: string, area?: string}} config - Config values (raw PAT)
  */
-function saveConfig(cwd, { org, project, pat, team }) {
+function saveConfig(cwd, { org, project, pat, team, area }) {
   const normalizedOrg = normaliseOrg(org);
   // Encode PAT: prepend colon (empty username), then base64 encode
   const encodedPat = Buffer.from(':' + pat).toString('base64');
@@ -217,6 +217,7 @@ function saveConfig(cwd, { org, project, pat, team }) {
     pat: encodedPat,
   };
   if (team) configData.team = team;
+  if (area) configData.area = area;
 
   fs.writeFileSync(configPath, JSON.stringify(configData, null, 2), 'utf-8');
 
@@ -607,13 +608,14 @@ async function cmdSaveConfig(cwd, args) {
   const orgIdx = args.indexOf('--org');
   const projectIdx = args.indexOf('--project');
   const patIdx = args.indexOf('--pat');
-
   const teamIdx = args.indexOf('--team');
+  const areaIdx = args.indexOf('--area');
 
   const org = orgIdx !== -1 ? args[orgIdx + 1] : null;
   const project = projectIdx !== -1 ? args[projectIdx + 1] : null;
   const pat = patIdx !== -1 ? args[patIdx + 1] : null;
   const team = teamIdx !== -1 ? args[teamIdx + 1] : null;
+  const area = areaIdx !== -1 ? args[areaIdx + 1] : null;
 
   const missing = [];
   if (!org) missing.push('--org');
@@ -622,13 +624,78 @@ async function cmdSaveConfig(cwd, args) {
 
   if (missing.length > 0) {
     console.error(`Missing required arguments: ${missing.join(', ')}`);
-    console.error('Usage: azdo-tools.cjs save-config --org <org> --project <project> --pat <pat> [--team <team>] [--cwd <path>]');
+    console.error('Usage: devsprint-tools.cjs save-config --org <org> --project <project> --pat <pat> [--team <team>] [--area <area>] [--cwd <path>]');
     process.exit(1);
   }
 
-  const result = saveConfig(cwd, { org, project, pat, team });
-  console.log(JSON.stringify({ status: 'saved', org: result.org, project: result.project, team: team || null }));
+  const result = saveConfig(cwd, { org, project, pat, team, area });
+  console.log(JSON.stringify({ status: 'saved', org: result.org, project: result.project, team: team || null, area: area || null }));
   process.exit(0);
+}
+
+/**
+ * Handles the list-teams command.
+ * Lists all teams in the project.
+ * stdout: JSON array [{"name":"...","id":"..."}]
+ * @param {string} cwd - Working directory
+ */
+async function cmdListTeams(cwd) {
+  try {
+    const cfg = loadConfig(cwd);
+    const encodedPat = Buffer.from(':' + cfg.pat).toString('base64');
+
+    const url = `${cfg.org}/_apis/projects/${cfg.project}/teams?$top=100&api-version=7.1`;
+    const res = await makeRequest(url, encodedPat);
+
+    if (res.status !== 200) {
+      throw new Error(`Failed to list teams: HTTP ${res.status}`);
+    }
+
+    const data = JSON.parse(res.body);
+    const teams = (data.value || []).map(t => ({ name: t.name, id: t.id }));
+    console.log(JSON.stringify(teams));
+    process.exit(0);
+  } catch (err) {
+    console.error(err.message);
+    process.exit(1);
+  }
+}
+
+/**
+ * Handles the get-team-area command.
+ * Resolves the default area path for a given team using the Team Field Values API.
+ * stdout: JSON {"team":"...","area":"..."}
+ * @param {string} cwd - Working directory
+ * @param {string[]} args - CLI args (--team <name>)
+ */
+async function cmdGetTeamArea(cwd, args) {
+  const teamIdx = args.indexOf('--team');
+  const teamName = teamIdx !== -1 ? args[teamIdx + 1] : null;
+
+  if (!teamName) {
+    console.error('Missing required argument: --team');
+    console.error('Usage: devsprint-tools.cjs get-team-area --team "<team name>" [--cwd <path>]');
+    process.exit(1);
+  }
+
+  try {
+    const cfg = loadConfig(cwd);
+    const encodedPat = Buffer.from(':' + cfg.pat).toString('base64');
+
+    const url = `${cfg.org}/${cfg.project}/${encodeURIComponent(teamName)}/_apis/work/teamsettings/teamfieldvalues?api-version=7.1`;
+    const res = await makeRequest(url, encodedPat);
+
+    if (res.status !== 200) {
+      throw new Error(`Failed to get team area for "${teamName}": HTTP ${res.status}`);
+    }
+
+    const data = JSON.parse(res.body);
+    console.log(JSON.stringify({ team: teamName, area: data.defaultValue || null }));
+    process.exit(0);
+  } catch (err) {
+    console.error(err.message);
+    process.exit(1);
+  }
 }
 
 /**
@@ -1629,7 +1696,7 @@ async function cmdCreateWorkItem(cwd, args) {
   const description = descIdx !== -1 ? args[descIdx + 1] : null;
   const parentId = parentIdx !== -1 ? args[parentIdx + 1] : null;
   const assignedTo = assignedIdx !== -1 ? args[assignedIdx + 1] : null;
-  const area = areaIdx !== -1 ? args[areaIdx + 1] : null;
+  const areaArg = areaIdx !== -1 ? args[areaIdx + 1] : null;
   const tags = tagsIdx !== -1 ? args[tagsIdx + 1] : null;
 
   const missing = [];
@@ -1666,6 +1733,8 @@ async function cmdCreateWorkItem(cwd, args) {
       patchBody.push({ op: 'add', path: '/fields/System.AssignedTo', value: assignedTo });
     }
 
+    // Use explicit --area arg, or fall back to config area
+    const area = areaArg || cfg.area;
     if (area) {
       patchBody.push({ op: 'add', path: '/fields/System.AreaPath', value: area });
     }
@@ -1940,9 +2009,17 @@ async function main() {
       await cmdCreateWorkItem(cwd, cmdArgs);
       break;
 
+    case 'list-teams':
+      await cmdListTeams(cwd);
+      break;
+
+    case 'get-team-area':
+      await cmdGetTeamArea(cwd, cmdArgs);
+      break;
+
     default:
       console.error(`Unknown command: ${command}`);
-      console.error('Available commands: save-config, load-config, test, get-sprint, get-sprint-items, get-branch-links, update-description, update-acceptance-criteria, update-state, get-child-states, create-branch, create-pr, show-sprint, list-repos, add-comment, delete-comment, create-work-item');
+      console.error('Available commands: save-config, load-config, test, get-sprint, get-sprint-items, get-branch-links, update-description, update-acceptance-criteria, update-state, get-child-states, create-branch, create-pr, show-sprint, list-repos, add-comment, delete-comment, create-work-item, list-teams, get-team-area');
       process.exit(1);
   }
 }
