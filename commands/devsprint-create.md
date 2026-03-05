@@ -1,5 +1,5 @@
 ---
-name: azdev-create
+name: devsprint-create
 description: Create stories and tasks in Azure DevOps current sprint
 argument-hint: "<description of what to create>"
 allowed-tools:
@@ -12,15 +12,15 @@ Create User Stories and Tasks in Azure DevOps from a natural language descriptio
 </objective>
 
 <execution_context>
-Helper: ~/.claude/bin/azdev-tools.cjs
-Config file: .planning/azdev-config.json
+Helper: ~/.claude/bin/devsprint-tools.cjs
+Config file: .planning/devsprint-config.json
 $CWD is the project directory where .planning/ lives.
 </execution_context>
 
 <context>
-azdev-tools.cjs CLI contract used by this command:
+devsprint-tools.cjs CLI contract used by this command:
 
-  node ~/.claude/bin/azdev-tools.cjs create-work-item --type <type> --title "<title>" [--description "<html>"] [--parent <id>] [--sprint] [--assigned-to "<name>"] [--area "<path>"] [--tags "<comma-separated>"] --cwd $CWD
+  node ~/.claude/bin/devsprint-tools.cjs create-work-item --type <type> --title "<title>" [--description "<html>"] [--parent <id>] [--sprint] [--assigned-to "<name>"] [--area "<path>"] [--tags "<comma-separated>"] --cwd $CWD
     -> Creates a work item in Azure DevOps
     -> --type: "User Story", "Task", "Bug", "Feature", or "Epic"
     -> --title: Work item title (required)
@@ -33,11 +33,11 @@ azdev-tools.cjs CLI contract used by this command:
     -> stdout: JSON {"status":"created","id":N,"type":"...","title":"...","url":"..."}
     -> exit 0 on success, exit 1 on error
 
-  node ~/.claude/bin/azdev-tools.cjs get-sprint-items --me --cwd $CWD
+  node ~/.claude/bin/devsprint-tools.cjs get-sprint-items --me --cwd $CWD
     -> Fetches items in current sprint (for context on existing stories)
     -> stdout: JSON array
 
-  node ~/.claude/bin/azdev-tools.cjs load-config --cwd $CWD
+  node ~/.claude/bin/devsprint-tools.cjs load-config --cwd $CWD
     -> Reads config
     -> stdout: JSON {"org":"...","project":"...","pat":"..."}
 </context>
@@ -46,8 +46,8 @@ azdev-tools.cjs CLI contract used by this command:
 
 **Step 1 — Check prerequisites:**
 
-1. Verify `~/.claude/bin/azdev-tools.cjs` exists. If not: "Azure DevOps tools not installed." Stop.
-2. Run `node ~/.claude/bin/azdev-tools.cjs load-config --cwd $CWD`. If exit 1: "No config. Run `/azdev-setup`." Stop.
+1. Verify `~/.claude/bin/devsprint-tools.cjs` exists. If not: "Azure DevOps tools not installed." Stop.
+2. Run `node ~/.claude/bin/devsprint-tools.cjs load-config --cwd $CWD`. If exit 1: "No config. Run `/devsprint-setup`." Stop.
 
 **Step 2 — Parse user intent:**
 

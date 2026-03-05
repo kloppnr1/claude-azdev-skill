@@ -1,5 +1,5 @@
 ---
-name: azdev-plan
+name: devsprint-plan
 description: Analyze and plan sprint stories — all assigned or a single story by ID
 argument-hint: "[story-id]"
 allowed-tools:
@@ -10,55 +10,55 @@ allowed-tools:
 ---
 
 <objective>
-Fetch assigned stories from the current Azure DevOps sprint, ask the user which repo each story belongs to, interactively verify each story with the user, update story descriptions in Azure DevOps, generate a detailed STORY.md spec per story (optimized for both human reading and AI-driven implementation), and present each for user approval. Write azdev-task-map.json for status tracking during execution.
+Fetch assigned stories from the current Azure DevOps sprint, ask the user which repo each story belongs to, interactively verify each story with the user, update story descriptions in Azure DevOps, generate a detailed STORY.md spec per story (optimized for both human reading and AI-driven implementation), and present each for user approval. Write devsprint-task-map.json for status tracking during execution.
 
 If a story ID is provided as argument, only process that single story (skip multi-story summary, go straight to analysis).
 </objective>
 
 <execution_context>
-Helper: ~/.claude/bin/azdev-tools.cjs
-Config file: .planning/azdev-config.json
+Helper: ~/.claude/bin/devsprint-tools.cjs
+Config file: .planning/devsprint-config.json
 $CWD is the project directory where .planning/ lives.
 </execution_context>
 
 <context>
-azdev-tools.cjs CLI contracts:
+devsprint-tools.cjs CLI contracts:
 
-  node ~/.claude/bin/azdev-tools.cjs load-config --cwd $CWD
+  node ~/.claude/bin/devsprint-tools.cjs load-config --cwd $CWD
     -> stdout: JSON {"org":"...","project":"...","pat":"<raw-decoded>"}
     -> exit 0 on success, exit 1 if no config
 
-  node ~/.claude/bin/azdev-tools.cjs get-sprint --cwd $CWD
+  node ~/.claude/bin/devsprint-tools.cjs get-sprint --cwd $CWD
     -> stdout: JSON {"iterationId":"...","name":"...","path":"...","startDate":"...","finishDate":"..."}
     -> exit 0 on success, exit 1 on error
 
-  node ~/.claude/bin/azdev-tools.cjs get-sprint-items --me --cwd $CWD
+  node ~/.claude/bin/devsprint-tools.cjs get-sprint-items --me --cwd $CWD
     -> stdout: JSON array [{id, type, title, state, description, acceptanceCriteria, parentId, assignedTo, tags}]
     -> tags: array of strings (e.g., ["research", "blocked"])
     -> --me: filter to authenticated user's items (parent stories + child tasks)
     -> exit 0 on success, exit 1 on error
 
-  node ~/.claude/bin/azdev-tools.cjs update-description --id <workItemId> --description "<html>" --cwd $CWD
+  node ~/.claude/bin/devsprint-tools.cjs update-description --id <workItemId> --description "<html>" --cwd $CWD
     -> stdout: JSON {"status":"updated","id":N}
     -> Uses PATCH API with application/json-patch+json content type
     -> exit 0 on success, exit 1 on error
 
-  node ~/.claude/bin/azdev-tools.cjs list-repos --cwd $CWD
+  node ~/.claude/bin/devsprint-tools.cjs list-repos --cwd $CWD
     -> stdout: JSON array [{"name":"...","id":"...","remoteUrl":"...","lastPushDate":"..."}]
     -> Lists Git repositories in the Azure DevOps project
     -> exit 0 on success, exit 1 on error
 
-  node ~/.claude/bin/azdev-tools.cjs update-acceptance-criteria --id <workItemId> --criteria "<html>" --cwd $CWD
+  node ~/.claude/bin/devsprint-tools.cjs update-acceptance-criteria --id <workItemId> --criteria "<html>" --cwd $CWD
     -> stdout: JSON {"status":"updated","id":N}
     -> Updates the Acceptance Criteria field of a work item. Accepts HTML.
     -> exit 0 on success, exit 1 on error
 
-  node ~/.claude/bin/azdev-tools.cjs add-comment --id <workItemId> --text "<html>" --cwd $CWD
+  node ~/.claude/bin/devsprint-tools.cjs add-comment --id <workItemId> --text "<html>" --cwd $CWD
     -> stdout: JSON {"status":"created","id":N,"commentId":N}
     -> Adds a comment (Discussion) to a work item. Text accepts HTML for rich formatting.
     -> exit 0 on success, exit 1 on error
 
-  node ~/.claude/bin/azdev-tools.cjs delete-comment --id <workItemId> --comment-id <commentId> --cwd $CWD
+  node ~/.claude/bin/devsprint-tools.cjs delete-comment --id <workItemId> --comment-id <commentId> --cwd $CWD
     -> stdout: JSON {"status":"deleted","id":N,"commentId":N}
     -> Deletes a comment from a work item.
     -> exit 0 on success, exit 1 on error
@@ -68,28 +68,28 @@ azdev-tools.cjs CLI contracts:
 
 **Step 0 — Parse arguments:**
 
-Check if the user passed a story ID as argument (e.g., `/azdev-plan 42920` or `/azdev-plan #42920`).
+Check if the user passed a story ID as argument (e.g., `/devsprint-plan 42920` or `/devsprint-plan #42920`).
 - If a numeric ID is provided: set `singleStoryMode = true` and `targetStoryId = <the ID>`.
 - If no argument: set `singleStoryMode = false` (process all assigned stories).
 - If argument is a task ID (not a story), it will be resolved to its parent story in Step 3.
 
 **Step 1 — Check prerequisites:**
 
-1. Verify `~/.claude/bin/azdev-tools.cjs` exists via Bash `test -f ~/.claude/bin/azdev-tools.cjs`.
-   If it does not exist: tell the user "Azure DevOps tools not installed. Check that ~/.claude/bin/azdev-tools.cjs exists." Stop.
+1. Verify `~/.claude/bin/devsprint-tools.cjs` exists via Bash `test -f ~/.claude/bin/devsprint-tools.cjs`.
+   If it does not exist: tell the user "Azure DevOps tools not installed. Check that ~/.claude/bin/devsprint-tools.cjs exists." Stop.
 
-2. Run `node ~/.claude/bin/azdev-tools.cjs load-config --cwd $CWD`.
-   If exit 1: tell the user "No Azure DevOps config found. Run `/azdev-setup` to configure your connection." Stop.
+2. Run `node ~/.claude/bin/devsprint-tools.cjs load-config --cwd $CWD`.
+   If exit 1: tell the user "No Azure DevOps config found. Run `/devsprint-setup` to configure your connection." Stop.
 
 **Step 2 — Fetch sprint metadata:**
 
-Run `node ~/.claude/bin/azdev-tools.cjs get-sprint --cwd $CWD`.
+Run `node ~/.claude/bin/devsprint-tools.cjs get-sprint --cwd $CWD`.
 - If exit 1: show the error message to the user. Stop.
 - If exit 0: parse the JSON. Extract `name` for display.
 
 **Step 3 — Fetch assigned stories:**
 
-Run `node ~/.claude/bin/azdev-tools.cjs get-sprint-items --me --cwd $CWD`.
+Run `node ~/.claude/bin/devsprint-tools.cjs get-sprint-items --me --cwd $CWD`.
 - If exit 1: show the error message to the user. Stop.
 - If exit 0: parse the JSON array.
 
@@ -120,10 +120,10 @@ For each story, check its `tags` array (case-insensitive). If tags include `"res
 
 For each story to process, ask the user which Azure DevOps repository it belongs to.
 
-1. **Fetch repos from Azure DevOps:** Run `node ~/.claude/bin/azdev-tools.cjs list-repos --cwd $CWD`.
+1. **Fetch repos from Azure DevOps:** Run `node ~/.claude/bin/devsprint-tools.cjs list-repos --cwd $CWD`.
    Parse the JSON array of `{name, id, remoteUrl}`.
 
-2. **Check existing task map:** If `$CWD/.planning/azdev-task-map.json` exists, check if this story already has a `repoPath` mapping. If so, use the repo name from that path as the default suggestion.
+2. **Check existing task map:** If `$CWD/.planning/devsprint-task-map.json` exists, check if this story already has a `repoPath` mapping. If so, use the repo name from that path as the default suggestion.
 
 3. **Ask the user** using `AskUserQuestion`:
    - Question: "Which repo should story #{id} ({title}) be planned in?"
@@ -294,7 +294,7 @@ Construct the new description in HTML (Azure DevOps descriptions use HTML, not m
 
 Then run:
 ```
-node ~/.claude/bin/azdev-tools.cjs update-description --id {storyId} --description "{newDescriptionHtml}" --cwd $CWD
+node ~/.claude/bin/devsprint-tools.cjs update-description --id {storyId} --description "{newDescriptionHtml}" --cwd $CWD
 ```
 
 If update fails, warn the user but continue (non-blocking error). The verified understanding is still used locally for file generation.
@@ -317,7 +317,7 @@ Rules for user-facing acceptance criteria:
 
 Run:
 ```
-node ~/.claude/bin/azdev-tools.cjs update-acceptance-criteria --id {storyId} --criteria "{html}" --cwd $CWD
+node ~/.claude/bin/devsprint-tools.cjs update-acceptance-criteria --id {storyId} --criteria "{html}" --cwd $CWD
 ```
 
 If update fails, warn but continue (non-blocking).
@@ -446,7 +446,7 @@ This is the single source of truth for the story — designed to be readable by 
 | #{task.id} | {task.title} | {task.state} |
 
 ---
-*Generated by /azdev-plan — {today's date}*
+*Generated by /devsprint-plan — {today's date}*
 ```
 
 Formatting rules:
@@ -505,16 +505,16 @@ After a story is approved, post a **summary** of the STORY.md as an HTML-formatt
 
 Run:
 ```
-node ~/.claude/bin/azdev-tools.cjs add-comment --id {storyId} --text "{htmlSummary}" --cwd $CWD
+node ~/.claude/bin/devsprint-tools.cjs add-comment --id {storyId} --text "{htmlSummary}" --cwd $CWD
 ```
 
 If the comment post fails, warn the user but continue (non-blocking error). The local STORY.md is the source of truth.
 
-**Step 11.5 — Write azdev-task-map.json:**
+**Step 11.5 — Write devsprint-task-map.json:**
 
 After all repos have been processed (approved or skipped), update the task map for status tracking.
 
-**Merge behavior:** If `$CWD/.planning/azdev-task-map.json` already exists, read it first and merge:
+**Merge behavior:** If `$CWD/.planning/devsprint-task-map.json` already exists, read it first and merge:
 - Keep existing mappings for stories NOT being re-planned.
 - Add or replace mappings for the story/stories just processed.
 - Update `generatedAt` timestamp.
@@ -528,7 +528,7 @@ For each **approved** repo, create a mapping entry:
 - `taskIds`: array of child task IDs that belong to this story
 - `taskTitles`: object mapping task ID (as string key) to task title
 
-Write the complete map to `$CWD/.planning/azdev-task-map.json` using the Write tool:
+Write the complete map to `$CWD/.planning/devsprint-task-map.json` using the Write tool:
 ```json
 {
   "version": 1,
@@ -540,7 +540,7 @@ Write the complete map to `$CWD/.planning/azdev-task-map.json` using the Write t
 
 If all repos were skipped (no approved entries) and no existing file, do NOT write the file.
 
-This file is used for automatic Azure DevOps status updates during execution: tasks are identified by their IDs and can be transitioned New → Active → Resolved using `azdev-tools.cjs update-state`.
+This file is used for automatic Azure DevOps status updates during execution: tasks are identified by their IDs and can be transitioned New → Active → Resolved using `devsprint-tools.cjs update-state`.
 
 **Step 12 — Final summary:**
 
@@ -554,10 +554,10 @@ Stories planned:
 Skipped:
   #{storyId} {storyTitle}: user skipped
 
-Task map written to: $CWD/.planning/azdev-task-map.json
+Task map written to: $CWD/.planning/devsprint-task-map.json
 
 Next steps:
-  Run `/azdev-execute {storyId}` to implement a story.
+  Run `/devsprint-execute {storyId}` to implement a story.
 ```
 
 If `singleStoryMode`: simplify the summary to just show the single story result.
@@ -574,18 +574,18 @@ If `singleStoryMode`: simplify the summary to just show the single story result.
 
 - Empty sprint or no assigned stories: Display "No stories assigned to you in the current sprint. Nothing to analyze."
 
-- Story ID not found (single-story mode): Display "Story #{targetStoryId} not found in your current sprint items. Run `/azdev-sprint` to see your assigned items."
+- Story ID not found (single-story mode): Display "Story #{targetStoryId} not found in your current sprint items. Run `/devsprint-sprint` to see your assigned items."
 
 - Repo path does not exist or has no .git: Warn user and re-ask for repo.
 
 </error_handling>
 
 <success_criteria>
-- Single-story mode: `/azdev-plan 42920` processes only story #42920 without multi-story summary
-- All-stories mode: `/azdev-plan` (no args) processes all assigned stories as before
+- Single-story mode: `/devsprint-plan 42920` processes only story #42920 without multi-story summary
+- All-stories mode: `/devsprint-plan` (no args) processes all assigned stories as before
 - Task/child ID argument resolves to parent story automatically
 - User selects repo from Azure DevOps project repos (fetched via list-repos)
-- Repo choice is stored in azdev-task-map.json for use during execution
+- Repo choice is stored in devsprint-task-map.json for use during execution
 - Each story is interactively verified with the user before file generation (Step 5.5)
 - Verified analysis replaces the story description in Azure DevOps (Step 5.6)
 - STORY.md contains specific, concrete details (file paths, class names, contacts, blockers) — not generic placeholders
@@ -593,6 +593,6 @@ If `singleStoryMode`: simplify the summary to just show the single story result.
 - Stories are correctly categorized by work type (code change vs manual/operational vs blocked)
 - User can approve or request changes per repo before files are finalized
 - No HTML artifacts appear in any generated file
-- azdev-task-map.json merges with existing entries (does not overwrite unrelated stories)
+- devsprint-task-map.json merges with existing entries (does not overwrite unrelated stories)
 - Task IDs in the map can be used to update status (New → Active → Resolved) during execution
 </success_criteria>

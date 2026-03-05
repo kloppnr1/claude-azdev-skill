@@ -1,5 +1,5 @@
 ---
-name: azdev-execute
+name: devsprint-execute
 description: Execute story plans and update Azure DevOps task status automatically
 argument-hint: "[story-id]"
 allowed-tools:
@@ -17,45 +17,45 @@ allowed-tools:
 Execute one or all stories from the task map. For each story: create a feature branch, activate tasks in Azure DevOps, implement the work from the story spec, auto-resolve tasks and story, push, and create a PR.
 
 **Mode depends on arguments:**
-- With story ID (`/azdev-execute 42920`): single-story mode — interactive, can ask user questions on blockers.
-- Without arguments (`/azdev-execute`): all-stories mode — autonomous loop, never asks questions, skips blockers and moves to next story.
+- With story ID (`/devsprint-execute 42920`): single-story mode — interactive, can ask user questions on blockers.
+- Without arguments (`/devsprint-execute`): all-stories mode — autonomous loop, never asks questions, skips blockers and moves to next story.
 </objective>
 
 <execution_context>
-Helper: ~/.claude/bin/azdev-tools.cjs
-Config file: .planning/azdev-config.json
-Task map: .planning/azdev-task-map.json
+Helper: ~/.claude/bin/devsprint-tools.cjs
+Config file: .planning/devsprint-config.json
+Task map: .planning/devsprint-task-map.json
 $CWD is the project directory where .planning/ lives.
 </execution_context>
 
 <context>
-azdev-tools.cjs CLI contracts used by this command:
+devsprint-tools.cjs CLI contracts used by this command:
 
-  node ~/.claude/bin/azdev-tools.cjs load-config --cwd $CWD
+  node ~/.claude/bin/devsprint-tools.cjs load-config --cwd $CWD
     -> stdout: JSON {"org":"...","project":"...","pat":"<raw-decoded>"}
     -> exit 0 on success, exit 1 if no config
 
-  node ~/.claude/bin/azdev-tools.cjs update-state --id <workItemId> --state <state> --cwd $CWD
+  node ~/.claude/bin/devsprint-tools.cjs update-state --id <workItemId> --state <state> --cwd $CWD
     -> stdout: JSON {"status":"updated","id":N,"state":"<newState>"}
     -> Valid states: "New", "Active", "Resolved", "Closed"
     -> exit 0 on success, exit 1 on error (invalid transition, 403, etc.)
 
-  node ~/.claude/bin/azdev-tools.cjs get-child-states --id <storyId> --cwd $CWD
+  node ~/.claude/bin/devsprint-tools.cjs get-child-states --id <storyId> --cwd $CWD
     -> stdout: JSON {"allResolved": bool, "children": [{"id":N,"title":"...","state":"..."}]}
     -> allResolved is true when every child is Resolved, Closed, or Done
     -> exit 0 on success, exit 1 on error
 
-  node ~/.claude/bin/azdev-tools.cjs create-branch --repo <path> --story-id <id> --title <title> [--base <branch>]
+  node ~/.claude/bin/devsprint-tools.cjs create-branch --repo <path> --story-id <id> --title <title> [--base <branch>]
     -> Stashes dirty changes, fetches base branch (develop, fallback main), creates feature/<id>-<slug>
     -> stdout: JSON {"branch":"...","base":"...","created":true|false}
     -> exit 0 on success, exit 1 on error
 
-  node ~/.claude/bin/azdev-tools.cjs create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body> --story-id <id> --cwd $CWD
+  node ~/.claude/bin/devsprint-tools.cjs create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body> --story-id <id> --cwd $CWD
     -> Pushes branch to origin, creates PR via Azure DevOps REST API, links to story
     -> stdout: JSON {"pr":"<url>","prId":N,"branch":"...","base":"...","pushed":true,"linked":true|false}
     -> exit 0 on success, exit 1 on error
 
-azdev-task-map.json structure (written by /azdev-plan):
+devsprint-task-map.json structure (written by /devsprint-plan):
   {
     "version": 1,
     "sprintName": "Sprint 5",
@@ -76,7 +76,7 @@ azdev-task-map.json structure (written by /azdev-plan):
 
 **Step 1 — Parse arguments and determine mode:**
 
-Check if the user passed a story ID as argument (e.g., `/azdev-execute 42920` or `/azdev-execute #42920`).
+Check if the user passed a story ID as argument (e.g., `/devsprint-execute 42920` or `/devsprint-execute #42920`).
 
 - If a numeric ID is provided: `mode = "single"`, `targetStoryId = <the ID>`.
 - If no argument: `mode = "all"`.
@@ -87,17 +87,17 @@ Check if the user passed a story ID as argument (e.g., `/azdev-execute 42920` or
 
 **Step 2 — Check prerequisites:**
 
-1. Verify `~/.claude/bin/azdev-tools.cjs` exists via Bash `test -f`.
-   If missing: tell user "Azure DevOps tools not installed. Check that ~/.claude/bin/azdev-tools.cjs exists." Stop.
+1. Verify `~/.claude/bin/devsprint-tools.cjs` exists via Bash `test -f`.
+   If missing: tell user "Azure DevOps tools not installed. Check that ~/.claude/bin/devsprint-tools.cjs exists." Stop.
 
-2. Run `node ~/.claude/bin/azdev-tools.cjs load-config --cwd $CWD`.
-   If exit 1: tell user "No Azure DevOps config found. Run `/azdev-setup` to configure your connection." Stop.
+2. Run `node ~/.claude/bin/devsprint-tools.cjs load-config --cwd $CWD`.
+   If exit 1: tell user "No Azure DevOps config found. Run `/devsprint-setup` to configure your connection." Stop.
 
-3. Check that `$CWD/.planning/azdev-task-map.json` exists via Bash `test -f`.
-   If missing: tell user "No task map found. Run `/azdev-plan` first to analyze your sprint stories." Stop.
+3. Check that `$CWD/.planning/devsprint-task-map.json` exists via Bash `test -f`.
+   If missing: tell user "No task map found. Run `/devsprint-plan` first to analyze your sprint stories." Stop.
 
-4. Read `$CWD/.planning/azdev-task-map.json` using the Read tool. Parse the JSON.
-   If the `mappings` array is empty: tell user "Task map has no story mappings. Run `/azdev-plan` and approve at least one story." Stop.
+4. Read `$CWD/.planning/devsprint-task-map.json` using the Read tool. Parse the JSON.
+   If the `mappings` array is empty: tell user "Task map has no story mappings. Run `/devsprint-plan` and approve at least one story." Stop.
 
 **Step 3 — Select stories to execute:**
 
@@ -133,10 +133,10 @@ Execute Steps 4a–4h below. In `all` mode: if any step encounters a non-fatal e
 
   **Step 4a — Check story state:**
 
-  Run `node ~/.claude/bin/azdev-tools.cjs get-child-states --id {storyId} --cwd $CWD` to check current state.
+  Run `node ~/.claude/bin/devsprint-tools.cjs get-child-states --id {storyId} --cwd $CWD` to check current state.
 
   Also fetch the story's own state from the sprint items:
-  Run `node ~/.claude/bin/azdev-tools.cjs get-sprint-items --me --cwd $CWD` and find the item matching `storyId`.
+  Run `node ~/.claude/bin/devsprint-tools.cjs get-sprint-items --me --cwd $CWD` and find the item matching `storyId`.
 
   - If the story state is "Resolved", "Closed", or "Done": log "Story #{storyId} already resolved — skipping", record as "skipped — already resolved", continue to next story.
   - If `allResolved === true`: log "All tasks for #{storyId} already resolved — skipping", record as "skipped — all tasks resolved", continue to next story.
@@ -146,14 +146,14 @@ Execute Steps 4a–4h below. In `all` mode: if any step encounters a non-fatal e
 
   1. Read `{repoPath}/.planning/stories/{storyId}.md` using the Read tool.
      If missing:
-     - `single` mode: tell user "No story spec found. Run `/azdev-plan {storyId}` to generate it." Stop.
+     - `single` mode: tell user "No story spec found. Run `/devsprint-plan {storyId}` to generate it." Stop.
      - `all` mode: log error, record as "skipped — no story spec", continue to next story.
 
   2. Parse the story spec — it contains goal, acceptance criteria, technical context (key files, architecture), implementation notes, open questions, and tasks. This is your single source of truth for the implementation.
 
   **Step 4c — Create feature branch:**
 
-  Run: `node ~/.claude/bin/azdev-tools.cjs create-branch --repo {repoPath} --story-id {storyId} --title "{storyTitle}"`
+  Run: `node ~/.claude/bin/devsprint-tools.cjs create-branch --repo {repoPath} --story-id {storyId} --title "{storyTitle}"`
 
   - If exit 0: parse JSON. Store `branch` as `branchName` and `base` as `baseBranch`.
     - If `created === true`: "Created branch {branch} from {base}"
@@ -167,7 +167,7 @@ Execute Steps 4a–4h below. In `all` mode: if any step encounters a non-fatal e
   Track which task IDs are successfully activated in a list called `activatedTaskIds`.
 
   For each task ID in `taskIds` (skip already-resolved tasks from Step 4a):
-  1. Run `node ~/.claude/bin/azdev-tools.cjs update-state --id {taskId} --state "Active" --cwd $CWD`
+  1. Run `node ~/.claude/bin/devsprint-tools.cjs update-state --id {taskId} --state "Active" --cwd $CWD`
   2. If exit 0: add to `activatedTaskIds`.
   3. If exit 1: warn but continue. The task may already be Active or in a non-transitionable state. Do NOT add to `activatedTaskIds`.
 
@@ -206,12 +206,12 @@ Execute Steps 4a–4h below. In `all` mode: if any step encounters a non-fatal e
 
   6. **Commit changes**: After meaningful chunks of work, commit changes via git. Use descriptive commit messages referencing the story ID (e.g., "feat: implement API endpoint for #{storyId}"). Do NOT ask — just commit directly on the feature branch.
 
-  IMPORTANT: Do NOT spend time exploring or understanding the codebase broadly. The `/azdev-plan` command already did that analysis and wrote the story spec. Trust the spec. Only read files that you are about to modify.
+  IMPORTANT: Do NOT spend time exploring or understanding the codebase broadly. The `/devsprint-plan` command already did that analysis and wrote the story spec. Trust the spec. Only read files that you are about to modify.
 
   **Step 4f — Auto-resolve activated tasks:**
 
   For each task ID in `activatedTaskIds`:
-  1. Run `node ~/.claude/bin/azdev-tools.cjs update-state --id {taskId} --state "Resolved" --cwd $CWD`
+  1. Run `node ~/.claude/bin/devsprint-tools.cjs update-state --id {taskId} --state "Resolved" --cwd $CWD`
   2. Log result.
 
   Display:
@@ -223,9 +223,9 @@ Execute Steps 4a–4h below. In `all` mode: if any step encounters a non-fatal e
 
   **Step 4g — Auto-resolve story if all tasks done:**
 
-  Run `node ~/.claude/bin/azdev-tools.cjs get-child-states --id {storyId} --cwd $CWD`
+  Run `node ~/.claude/bin/devsprint-tools.cjs get-child-states --id {storyId} --cwd $CWD`
   - If `allResolved === true`:
-    Run `node ~/.claude/bin/azdev-tools.cjs update-state --id {storyId} --state "Resolved" --cwd $CWD`
+    Run `node ~/.claude/bin/devsprint-tools.cjs update-state --id {storyId} --state "Resolved" --cwd $CWD`
     Display: "Story #{storyId} resolved ✓"
   - If `allResolved === false`:
     Display remaining open tasks:
@@ -254,7 +254,7 @@ Execute Steps 4a–4h below. In `all` mode: if any step encounters a non-fatal e
   - [ ] Code review
   ```
 
-  Run: `node ~/.claude/bin/azdev-tools.cjs create-pr --repo {repoPath} --branch {branchName} --base {baseBranch} --title "#{storyId} {storyTitle}" --body "{prBody}" --story-id {storyId} --cwd $CWD`
+  Run: `node ~/.claude/bin/devsprint-tools.cjs create-pr --repo {repoPath} --branch {branchName} --base {baseBranch} --title "#{storyId} {storyTitle}" --body "{prBody}" --story-id {storyId} --cwd $CWD`
 
   - If exit 0: parse JSON. Store `pr` URL in results. PR is automatically linked to the story.
   - If exit 1:
@@ -293,8 +293,8 @@ Pull requests:
   {list of PR URLs}
 
 Next steps:
-  {If tasks remain: "Run `/azdev-execute {storyId}` to continue on remaining tasks."}
-  {If all resolved: "Review and merge the PRs, then run `/azdev-sprint` to see updated sprint status."}
+  {If tasks remain: "Run `/devsprint-execute {storyId}` to continue on remaining tasks."}
+  {If all resolved: "Review and merge the PRs, then run `/devsprint-sprint` to see updated sprint status."}
 ```
 
 </process>
@@ -305,13 +305,13 @@ Next steps:
 
 - `update-state` returns exit 1 with "invalid state transition": The task may already be in the target state or in a state that doesn't allow the transition (e.g., Closed → Active). Warn but continue. Non-blocking.
 
-- `update-state` returns 403: "Insufficient permissions. Your PAT may not have `vso.work_write` scope. Regenerate your PAT with `vso.work_write` and run `/azdev-setup`."
+- `update-state` returns 403: "Insufficient permissions. Your PAT may not have `vso.work_write` scope. Regenerate your PAT with `vso.work_write` and run `/devsprint-setup`."
 
 - Task map references a repo path that no longer exists:
   - `single` mode: warn the user and ask for the correct path.
   - `all` mode: skip the story, record as "skipped — repo not found at {path}".
 
-- Story spec is missing but task map exists: Tell user to run `/azdev-plan {storyId}` to regenerate.
+- Story spec is missing but task map exists: Tell user to run `/devsprint-plan {storyId}` to regenerate.
 
 - Git operations fail in target repo: Attempt `git stash`, retry. If still failing:
   - `single` mode: warn user with error details.
@@ -324,15 +324,15 @@ Next steps:
 - PR creation fails: Branch is already pushed. Suggest creating the PR manually in Azure DevOps.
 
 **In `all` mode only:** Never stop the loop for per-story errors. Only STOP the entire execution for:
-- Missing azdev-tools.cjs (nothing can work without it)
+- Missing devsprint-tools.cjs (nothing can work without it)
 - Missing config (no API access)
 - Missing or empty task map (nothing to execute)
 
 </error_handling>
 
 <success_criteria>
-- `/azdev-execute 42920` runs a single story interactively
-- `/azdev-execute` runs all stories autonomously without user prompts
+- `/devsprint-execute 42920` runs a single story interactively
+- `/devsprint-execute` runs all stories autonomously without user prompts
 - Already-resolved stories and tasks are skipped automatically
 - Each story gets its own feature branch from develop
 - Tasks are activated before work and resolved after — automatically

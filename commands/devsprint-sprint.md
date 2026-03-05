@@ -1,5 +1,5 @@
 ---
-name: azdev-sprint
+name: devsprint-sprint
 description: View current sprint backlog from Azure DevOps
 argument-hint: "[--all]"
 allowed-tools:
@@ -11,16 +11,16 @@ Fetch and display the current sprint backlog from Azure DevOps with ANSI-colored
 </objective>
 
 <execution_context>
-Helper: ~/.claude/bin/azdev-tools.cjs
-Config file: .planning/azdev-config.json
+Helper: ~/.claude/bin/devsprint-tools.cjs
+Config file: .planning/devsprint-config.json
 </execution_context>
 
 <context>
 $CWD is the project directory where .planning/ lives.
 
-azdev-tools.cjs CLI contract used by this command:
+devsprint-tools.cjs CLI contract used by this command:
 
-  node ~/.claude/bin/azdev-tools.cjs show-sprint [--me] --cwd $CWD
+  node ~/.claude/bin/devsprint-tools.cjs show-sprint [--me] --cwd $CWD
     -> Fetches sprint metadata, fetches work items, renders colored board to stdout
     -> --me: filter to items assigned to the authenticated user
     -> (no flag): shows all items in the sprint
@@ -31,16 +31,16 @@ azdev-tools.cjs CLI contract used by this command:
 
 <process>
 1. **Check that the helper exists:**
-   Run: `test -f ~/.claude/bin/azdev-tools.cjs`
-   If missing: tell the user "Azure DevOps tools not installed. Check that ~/.claude/bin/azdev-tools.cjs exists." Stop.
+   Run: `test -f ~/.claude/bin/devsprint-tools.cjs`
+   If missing: tell the user "Azure DevOps tools not installed. Check that ~/.claude/bin/devsprint-tools.cjs exists." Stop.
 
 2. **Run the show-sprint command:**
 
    **Default (no argument or anything other than `--all`):** Show only the user's own items:
-   Run: `node ~/.claude/bin/azdev-tools.cjs show-sprint --me --cwd $CWD`
+   Run: `node ~/.claude/bin/devsprint-tools.cjs show-sprint --me --cwd $CWD`
 
    **If the user passed `--all`:** Show the entire sprint:
-   Run: `node ~/.claude/bin/azdev-tools.cjs show-sprint --cwd $CWD`
+   Run: `node ~/.claude/bin/devsprint-tools.cjs show-sprint --cwd $CWD`
 </process>
 
 <important>

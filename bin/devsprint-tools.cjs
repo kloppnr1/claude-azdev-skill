@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * azdev-tools.cjs — Azure DevOps API helper for Claude Code skills
+ * devsprint-tools.cjs — Azure DevOps API helper for Claude Code skills
  *
  * Handles config file I/O, PAT encoding/decoding, HTTP requests to Azure DevOps REST API,
  * and connection testing. Uses ONLY Node.js built-ins (fs, path, https, Buffer).
@@ -11,13 +11,13 @@
  *
  * Commands:
  *   save-config --org <org> --project <project> --pat <pat> [--cwd <path>]
- *     Saves Azure DevOps credentials to .planning/azdev-config.json
+ *     Saves Azure DevOps credentials to .planning/devsprint-config.json
  *     Normalizes org URL to slug, base64-encodes PAT.
  *     stdout: JSON {"status":"saved","org":"...","project":"..."}
  *     Exit 0 on success, exit 1 on error.
  *
  *   load-config [--cwd <path>]
- *     Reads .planning/azdev-config.json, decodes PAT.
+ *     Reads .planning/devsprint-config.json, decodes PAT.
  *     stdout: JSON {"org":"...","project":"...","pat":"<raw>"}
  *     Exit 0 on success, exit 1 if no config found.
  *
@@ -120,12 +120,12 @@ const { execSync } = require('child_process');
 // ─── Config Helpers ────────────────────────────────────────────────────────────
 
 /**
- * Returns the absolute path to the azdev-config.json file for the given cwd.
+ * Returns the absolute path to the devsprint-config.json file for the given cwd.
  * @param {string} cwd - Working directory (project root)
- * @returns {string} Absolute path to azdev-config.json
+ * @returns {string} Absolute path to devsprint-config.json
  */
 function getConfigPath(cwd) {
-  return path.join(cwd, '.planning', 'azdev-config.json');
+  return path.join(cwd, '.planning', 'devsprint-config.json');
 }
 
 /**
@@ -154,7 +154,7 @@ function normaliseOrg(input) {
 }
 
 /**
- * Loads and parses azdev-config.json, decoding the PAT from base64.
+ * Loads and parses devsprint-config.json, decoding the PAT from base64.
  * @param {string} cwd - Working directory (project root)
  * @returns {{org: string, project: string, pat: string}} Config with raw PAT
  * @throws {Error} If config file is missing or malformed
@@ -163,7 +163,7 @@ function loadConfig(cwd) {
   const configPath = getConfigPath(cwd);
   if (!fs.existsSync(configPath)) {
     throw new Error(
-      `No Azure DevOps config found at ${configPath}. Run /azdev-setup to configure.`
+      `No Azure DevOps config found at ${configPath}. Run /devsprint-setup to configure.`
     );
   }
 
@@ -178,11 +178,11 @@ function loadConfig(cwd) {
   try {
     cfg = JSON.parse(raw);
   } catch (err) {
-    throw new Error(`Config file is not valid JSON: ${err.message}. Run /azdev-setup to reconfigure.`);
+    throw new Error(`Config file is not valid JSON: ${err.message}. Run /devsprint-setup to reconfigure.`);
   }
 
   if (!cfg.org || !cfg.project || !cfg.pat) {
-    throw new Error(`Config file is missing required fields (org, project, pat). Run /azdev-setup to reconfigure.`);
+    throw new Error(`Config file is missing required fields (org, project, pat). Run /devsprint-setup to reconfigure.`);
   }
 
   // Decode PAT: base64 -> ":rawpat" -> slice leading colon
@@ -193,7 +193,7 @@ function loadConfig(cwd) {
 }
 
 /**
- * Saves Azure DevOps config to .planning/azdev-config.json.
+ * Saves Azure DevOps config to .planning/devsprint-config.json.
  * Normalizes org URL to slug, encodes PAT as base64 with leading colon.
  * @param {string} cwd - Working directory (project root)
  * @param {{org: string, project: string, pat: string, team?: string}} config - Config values (raw PAT)
@@ -680,12 +680,12 @@ async function cmdTest(cwd) {
   }
 
   if (projectsRes.status === 401) {
-    console.error('Authentication failed. Check your PAT is correct and has not expired. Run /azdev-setup to reconfigure.');
+    console.error('Authentication failed. Check your PAT is correct and has not expired. Run /devsprint-setup to reconfigure.');
     process.exit(1);
   }
 
   if (projectsRes.status === 403) {
-    console.error('Authorisation denied. Check your PAT has the vso.project scope. Run /azdev-setup to reconfigure.');
+    console.error('Authorisation denied. Check your PAT has the vso.project scope. Run /devsprint-setup to reconfigure.');
     process.exit(1);
   }
 
@@ -709,7 +709,7 @@ async function cmdTest(cwd) {
   // 404 is acceptable (item not found = auth is OK, just no item with id=1)
   // Only 401/403 means scope is missing
   if (workItemsRes.status === 401 || workItemsRes.status === 403) {
-    console.error('Authentication succeeded but work items access denied. Check your PAT has the vso.work scope. Run /azdev-setup to reconfigure.');
+    console.error('Authentication succeeded but work items access denied. Check your PAT has the vso.work scope. Run /devsprint-setup to reconfigure.');
     process.exit(1);
   }
 
@@ -856,7 +856,7 @@ async function cmdUpdateAcceptanceCriteria(cwd, args) {
 
   if (missing.length > 0) {
     console.error(`Missing required arguments: ${missing.join(', ')}`);
-    console.error('Usage: azdev-tools.cjs update-acceptance-criteria --id <workItemId> --criteria "<html>" [--cwd <path>]');
+    console.error('Usage: devsprint-tools.cjs update-acceptance-criteria --id <workItemId> --criteria "<html>" [--cwd <path>]');
     process.exit(1);
   }
 
@@ -935,7 +935,7 @@ async function cmdUpdateState(cwd, args) {
       console.error(`Invalid state transition for work item ${id}: ${errorBody.message || res.body}. Check that '${state}' is a valid target state.`);
       process.exit(1);
     } else if (res.status === 403) {
-      console.error(`Status update failed for work item ${id}: PAT needs vso.work_write scope. Regenerate at https://dev.azure.com/_usersSettings/tokens and re-run /azdev-setup.`);
+      console.error(`Status update failed for work item ${id}: PAT needs vso.work_write scope. Regenerate at https://dev.azure.com/_usersSettings/tokens and re-run /devsprint-setup.`);
       process.exit(1);
     } else {
       let errorBody = {};
@@ -1175,7 +1175,7 @@ async function cmdAddComment(cwd, args) {
 
   if (missing.length > 0) {
     console.error(`Missing required arguments: ${missing.join(', ')}`);
-    console.error('Usage: azdev-tools.cjs add-comment --id <workItemId> --text "<html>" [--cwd <path>]');
+    console.error('Usage: devsprint-tools.cjs add-comment --id <workItemId> --text "<html>" [--cwd <path>]');
     process.exit(1);
   }
 
@@ -1218,7 +1218,7 @@ async function cmdDeleteComment(cwd, args) {
 
   if (missing.length > 0) {
     console.error(`Missing required arguments: ${missing.join(', ')}`);
-    console.error('Usage: azdev-tools.cjs delete-comment --id <workItemId> --comment-id <commentId> [--cwd <path>]');
+    console.error('Usage: devsprint-tools.cjs delete-comment --id <workItemId> --comment-id <commentId> [--cwd <path>]');
     process.exit(1);
   }
 
@@ -1247,7 +1247,7 @@ async function cmdDeleteComment(cwd, args) {
  * Fetches sprint metadata and items from Azure DevOps, then renders
  * a colored terminal board. Single command — no intermediate JSON passing needed.
  *
- * Usage: azdev-tools.cjs show-sprint [--me] [--cwd <path>]
+ * Usage: devsprint-tools.cjs show-sprint [--me] [--cwd <path>]
  *
  * stdout: ANSI-colored sprint board
  * Exit 0 on success, exit 1 on error.
@@ -1386,7 +1386,7 @@ function slugify(title) {
  * Handles the create-branch command.
  * Creates a feature branch from a base branch (default: develop, fallback: main).
  *
- * Usage: azdev-tools.cjs create-branch --repo <path> --story-id <id> --title <title> [--base <branch>]
+ * Usage: devsprint-tools.cjs create-branch --repo <path> --story-id <id> --title <title> [--base <branch>]
  *
  * Steps:
  *   1. Stash uncommitted changes (if any)
@@ -1418,7 +1418,7 @@ async function cmdCreateBranch(cwd, args) {
 
   if (missing.length > 0) {
     console.error(`Missing required arguments: ${missing.join(', ')}`);
-    console.error('Usage: azdev-tools.cjs create-branch --repo <path> --story-id <id> --title <title> [--base <branch>]');
+    console.error('Usage: devsprint-tools.cjs create-branch --repo <path> --story-id <id> --title <title> [--base <branch>]');
     process.exit(1);
   }
 
@@ -1486,7 +1486,7 @@ async function cmdCreateBranch(cwd, args) {
  * Handles the create-pr command.
  * Pushes the current branch and creates a PR in Azure DevOps, linked to the story.
  *
- * Usage: azdev-tools.cjs create-pr --repo <path> --branch <name> --base <branch>
+ * Usage: devsprint-tools.cjs create-pr --repo <path> --branch <name> --base <branch>
  *          --title <title> --body <body> --story-id <id> --cwd <path>
  *
  * Steps:
@@ -1521,7 +1521,7 @@ async function cmdCreatePr(cwd, args) {
 
   if (missing.length > 0) {
     console.error(`Missing required arguments: ${missing.join(', ')}`);
-    console.error('Usage: azdev-tools.cjs create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body> --story-id <id> --cwd <path>');
+    console.error('Usage: devsprint-tools.cjs create-pr --repo <path> --branch <name> --base <branch> --title <title> --body <body> --story-id <id> --cwd <path>');
     process.exit(1);
   }
 
@@ -1591,7 +1591,7 @@ async function cmdCreatePr(cwd, args) {
  * Handles the list-repos command.
  * Fetches Git repositories from the Azure DevOps project, sorted by most recent push.
  *
- * Usage: azdev-tools.cjs list-repos [--top <N>] --cwd <path>
+ * Usage: devsprint-tools.cjs list-repos [--top <N>] --cwd <path>
  *
  * stdout: JSON array [{name, id, remoteUrl, lastPushDate}]
  * Exit 0 on success, exit 1 on error.
@@ -1638,7 +1638,7 @@ async function cmdCreateWorkItem(cwd, args) {
 
   if (missing.length > 0) {
     console.error(`Missing required arguments: ${missing.join(', ')}`);
-    console.error('Usage: azdev-tools.cjs create-work-item --type <"User Story"|"Task"|"Bug"> --title "<title>" [--description "<html>"] [--parent <id>] [--sprint] [--assigned-to "<name>"] [--area "<path>"] [--tags "<comma-separated>"]');
+    console.error('Usage: devsprint-tools.cjs create-work-item --type <"User Story"|"Task"|"Bug"> --title "<title>" [--description "<html>"] [--parent <id>] [--sprint] [--assigned-to "<name>"] [--area "<path>"] [--tags "<comma-separated>"]');
     process.exit(1);
   }
 
@@ -1799,9 +1799,9 @@ async function main() {
     console.error('');
     console.error('Commands:');
     console.error('  save-config  --org <org> --project <project> --pat <pat>');
-    console.error('               Save Azure DevOps credentials to .planning/azdev-config.json');
+    console.error('               Save Azure DevOps credentials to .planning/devsprint-config.json');
     console.error('');
-    console.error('  load-config  Read and decode credentials from .planning/azdev-config.json');
+    console.error('  load-config  Read and decode credentials from .planning/devsprint-config.json');
     console.error('');
     console.error('  test         Test connection to Azure DevOps API');
     console.error('');
