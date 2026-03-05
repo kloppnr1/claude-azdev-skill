@@ -1,30 +1,36 @@
-# claude-azdev-skill
+# claude-azdev-plugin
 
-Azure DevOps sprint integration for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Connects your sprint backlog to your local repos — analyzes stories, generates project plans, executes work, and keeps Azure DevOps in sync.
+An Azure DevOps plugin for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) that turns your sprint backlog into working code.
 
-## Quick overview
+Point it at your sprint, and it will read your stories, analyze the relevant repos, write implementation plans, generate code, create PRs, and resolve tasks — all without leaving your terminal. Run `/azdev-execute` and walk away. Come back to pull requests linked to your stories, tasks marked as resolved, and a summary of everything it did.
+
+**No browser tab juggling. No copy-pasting story descriptions. No manual status updates.** Your sprint board stays in sync because the plugin updates it as it works.
+
+## What can it do?
+
+- **View your sprint** from the terminal — stories, tasks, state, descriptions, all color-coded
+- **Create stories and tasks** from natural language — just describe what you need
+- **Analyze stories** — reads the target repo, traces code paths, identifies the files that need changes, and writes a detailed implementation spec
+- **Execute stories autonomously** — creates a feature branch, writes the code, runs tests, commits, pushes, creates a PR linked to the story, and resolves all tasks
+- **Batch mode** — run `/azdev-execute` with no arguments and it loops through every story in your sprint. Errors on one story don't block the next
+
+Zero external dependencies. Just Node.js built-ins and the Azure DevOps REST API.
+
+## Quick start
 
 ```
 /azdev-setup              →  Connect to Azure DevOps (one-time)
-/azdev-sprint             →  See your sprint backlog (default: your items, --all for everything)
+/azdev-sprint             →  See your sprint board
 /azdev-create <description> → Create stories & tasks from natural language
-/azdev-plan [story-id]    →  Analyze stories → pick repos → verify → generate plans
-/azdev-execute [story-id] →  Execute one story (interactive) or all stories (autonomous)
+/azdev-plan [story-id]    →  Analyze stories → pick repos → verify → generate specs
+/azdev-execute [story-id] →  Implement, commit, push, create PR, resolve tasks
 ```
 
 **The typical workflow:**
-1. Run `/azdev-sprint` — see what's in the sprint
-2. Run `/azdev-create` — add missing stories or tasks (optional)
-3. Run `/azdev-plan` — fetches your stories, asks which repo each belongs to, verifies your understanding, and generates project plans
-4. Run `/azdev-execute` — works through the plan, writes code, and updates Azure DevOps as tasks get done
-
-## What it does
-
-1. **Connect** — Configure your Azure DevOps org, project, and Personal Access Token
-2. **View sprint** — Fetch the current sprint backlog with stories, tasks, descriptions, and acceptance criteria
-3. **Create** — Add stories and tasks to the sprint from natural language descriptions
-4. **Plan** — Analyze stories, pick target repos, verify understanding, update Azure DevOps descriptions, and generate story specs (`STORY.md`) in each target repo
-5. **Execute** — Create feature branches, implement changes, resolve tasks, and create PRs — all linked to Azure DevOps
+1. `/azdev-sprint` — see what's in the sprint
+2. `/azdev-create` — add missing stories or tasks (optional)
+3. `/azdev-plan` — analyze stories, pick repos, verify understanding, generate implementation specs
+4. `/azdev-execute` — implement everything, create PRs, resolve tasks automatically
 
 ## Prerequisites
 
@@ -39,7 +45,7 @@ Azure DevOps sprint integration for [Claude Code](https://docs.anthropic.com/en/
 ## Installation
 
 ```bash
-git clone <this-repo> && cd claude-azdev-skill
+git clone <this-repo> && cd claude-azdev-plugin
 ./install.sh
 ```
 
@@ -164,7 +170,7 @@ All commands output JSON to stdout and use exit code 0/1 for success/failure.
 ## Project structure
 
 ```
-claude-azdev-skill/
+claude-azdev-plugin/
 ├── install.sh                     # One-command installer
 ├── bin/
 │   └── azdev-tools.cjs          # Node.js helper — all Azure DevOps API calls
