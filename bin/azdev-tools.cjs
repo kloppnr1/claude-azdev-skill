@@ -1552,12 +1552,12 @@ async function cmdCreatePr(cwd, args) {
       prBody.workItemRefs = [{ id: storyId }];
     }
 
-    const prUrl = `${cfg.org}/${encodeURIComponent(cfg.project)}/_apis/git/repositories/${encodeURIComponent(repoName)}/pullrequests?api-version=7.1`;
+    const prUrl = `${cfg.org}/${cfg.project}/_apis/git/repositories/${encodeURIComponent(repoName)}/pullrequests?api-version=7.1`;
     const prRes = await makeRequest(prUrl, encodedPat, 'POST', prBody);
 
     if (prRes.status === 201 || prRes.status === 200) {
       const prData = JSON.parse(prRes.body);
-      const webUrl = `${cfg.org}/${encodeURIComponent(cfg.project)}/_git/${encodeURIComponent(repoName)}/pullRequest/${prData.pullRequestId}`;
+      const webUrl = `${cfg.org}/${cfg.project}/_git/${encodeURIComponent(repoName)}/pullRequest/${prData.pullRequestId}`;
       console.log(JSON.stringify({
         pr: webUrl,
         prId: prData.pullRequestId,
