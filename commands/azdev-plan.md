@@ -10,7 +10,7 @@ allowed-tools:
 ---
 
 <objective>
-Fetch assigned stories from the current Azure DevOps sprint, ask the user which repo each story belongs to, interactively verify each story with the user, update story descriptions in Azure DevOps, generate PROJECT.md + ROADMAP.md + REQUIREMENTS.md per target repo, and present each for user approval. Write azdev-task-map.json for status tracking during execution.
+Fetch assigned stories from the current Azure DevOps sprint, ask the user which repo each story belongs to, interactively verify each story with the user, update story descriptions in Azure DevOps, generate a detailed STORY.md spec per story (optimized for both human reading and AI-driven implementation), and present each for user approval. Write azdev-task-map.json for status tracking during execution.
 
 If a story ID is provided as argument, only process that single story (skip multi-story summary, go straight to analysis).
 </objective>
@@ -202,182 +202,134 @@ If update fails, warn the user but continue (non-blocking error). The verified u
 **Step 7 — Check for existing .planning/ in target repo:**
 
 For each repo that will be processed:
-- Check if `{repoPath}/.planning/PROJECT.md` exists via Bash `test -f`.
+- Check if `{repoPath}/.planning/stories/{storyId}.md` exists via Bash `test -f`.
 - If it exists, use `AskUserQuestion`:
-  "Repo {repoName} already has a project at {repoPath}/.planning/PROJECT.md. Overwrite it? (yes/no)"
-  If the user says "no", skip this repo. Default to no if unclear.
+  "Story #{storyId} already has a spec at {repoPath}/.planning/stories/{storyId}.md. Overwrite it? (yes/no)"
+  If the user says "no", skip this story. Default to no if unclear.
 
-**Step 8 — Generate PROJECT.md for each target repo:**
+**Step 8 — Generate STORY.md for each story:**
 
-Use the `Write` tool to create `{repoPath}/.planning/PROJECT.md`. Ensure `.planning/` directory exists first (create via Bash `mkdir -p "{repoPath}/.planning"` if needed).
+Use the `Write` tool to create `{repoPath}/.planning/stories/{storyId}.md`. Ensure the directory exists first (create via Bash `mkdir -p "{repoPath}/.planning/stories"` if needed).
 
-**IMPORTANT:** Use the **verified understanding** from Step 5.5 (not the raw AzDO description) for "What This Is" and "Core Value" sections. The verified understanding has been validated by the user and correctly describes what the work actually involves.
+This is the single source of truth for the story — designed to be readable by humans AND actionable by an AI coding agent. Every section must contain **specific, concrete details** from the verified understanding, the story description, and the repo analysis. Never use vague placeholders.
 
-Map Azure DevOps fields to PROJECT.md sections:
+**CRITICAL RULES for writing STORY.md:**
+- Extract EVERY specific detail from the story description: file paths, class names, API endpoints, contact persons, config values, naming conventions, etc.
+- If the story mentions "see X for details", read X during repo analysis (Step 4.5) and include what you found.
+- Blockers and open questions must be called out explicitly — they prevent the AI from guessing.
+- Acceptance criteria must be testable: "it works" is not testable, "running X produces Y" is.
+- Include concrete file paths from the repo analysis — the AI agent needs to know WHERE to make changes.
 
 ```markdown
-# {repoName}
+# #{story.id} — {story.title}
 
-## What This Is
+> **Sprint**: {sprintName} | **Repo**: {repoName} | **Type**: {work type} | **State**: {story.state}
 
-{verified understanding from Step 5.5 — the user-approved summary of what this story is about}
-This work is tracked as Azure DevOps story #{story.id}: "{story.title}".
+## Goal
 
-## Core Value
+{One sentence: what is the end result when this story is done? Be specific — not "upload files" but "historical invoices from the last 5 years are uploaded to Systemate Blob Storage in the structure {dataareaid}/{accountnum}/"}
 
-{Derived from the verified understanding — the single must-work thing. One sentence.}
+## Background
 
-## Requirements
+{2-4 sentences of context from the verified understanding. Include:}
+- Why this work is needed (business reason)
+- What system/feature it relates to
+- Any prior work or existing functionality that this builds on
+- Key domain concepts a developer needs to understand
 
-### Validated
+## Acceptance Criteria
 
-(None yet — ship to validate)
+{Derived from story.acceptanceCriteria AND child tasks. Each criterion must be specific and testable.}
 
-### Active
+- [ ] {Specific, testable criterion — e.g., "PDFs are uploaded to blob path {dataareaid}/{accountnum}/{filename}"}
+- [ ] {Another criterion — e.g., "Upload covers invoices from {date range}"}
+- [ ] {Criterion from child task if it adds a distinct requirement}
 
-{For each criterion in story.acceptanceCriteria (split on newlines, skip blank lines):}
-- [ ] {criterion text}
-{For each child task in the story's child tasks:}
-- [ ] {task.title}
+## Technical Context
 
-### Out of Scope
+### Key Files
+{From repo analysis — list the specific files/classes/modules that are relevant to this story:}
+- `path/to/RelevantService.cs` — {what it does and why it's relevant}
+- `path/to/Config.json` — {what config is relevant}
 
-(Defined during phase planning)
+### Architecture
+{How the relevant part of the codebase is structured:}
+- {e.g., "Export pipeline: ExportService → PdfIndexService → BlobUploader"}
+- {e.g., "Config is loaded from appsettings.json, section 'BlobStorage'"}
 
-## Context
+### Tech Stack
+- {e.g., ".NET 8 / C# console app"}
+- {e.g., "Azure Blob Storage SDK"}
 
-- Azure DevOps Story: #{story.id} -- {story.title}
-- Sprint: {sprintName}
-- Target repo: {repoName}
-- State: {story.state}
-- Work type: {verified work type from Step 5.5}
+### Existing Branch
+{If a feature branch for this story already exists from Step 4.5:}
+- Branch: `{branchName}`
+- Progress: {what's already done based on diff analysis}
+- {Or "None — starting from scratch"}
 
-## Repo Analysis
+## Implementation Notes
 
-{Repo analysis summary from Step 4.5:}
-- **Tech stack**: {detected tech stack}
-- **Architecture**: {key patterns/layers}
-- **Existing branch**: {branch info or "None"}
-- **Risks**: {any concerns, or "None identified"}
+{Specific technical details extracted from the story description, acceptance criteria, and repo analysis. This is the "how" — concrete enough that an AI can act on it without guessing.}
 
-## Constraints
+- {e.g., "New file structure is {dataareaid}/{accountnum}/ — see DataMigration.PdfIndexService for the mapping logic"}
+- {e.g., "Use existing export tool at path/to/tool — it already handles export and upload"}
+- {e.g., "Blob storage connection string is in appsettings.json under 'SystemateBlobStorage'"}
 
-- **Tech stack**: {detected tech stack from repo analysis}
-- **Auth**: Azure DevOps PAT for API access
+## Contacts
 
-## Key Decisions
+{Only if the story mentions specific people:}
+- {e.g., "Lars Hansen (lah@systemate.dk) — Systemate contact for blob storage"}
+- {e.g., "CC: Christian Dam Nykjær (cdn@systemate.dk)"}
 
-| Decision | Rationale | Outcome |
-|----------|-----------|---------|
-| (Defined during phase planning) | | |
+## Open Questions & Blockers
+
+{Anything that is NOT yet resolved. The AI agent must NOT guess at these — they require human input.}
+
+- [ ] {e.g., "Datasikkerhed: Afklaring af hvordan data krypteres under upload — BLOKERER implementation"}
+- [ ] {e.g., "Er der rate limits på blob storage API'et?"}
+
+{If no open questions: "None — ready for implementation."}
+
+## Out of Scope
+
+{What this story explicitly does NOT cover:}
+- {e.g., "Migration of invoices older than 5 years"}
+- {e.g., "Changes to the self-service frontend — that's a separate story"}
+
+## Tasks (Azure DevOps)
+
+| ID | Title | State |
+|----|-------|-------|
+{For each child task:}
+| #{task.id} | {task.title} | {task.state} |
 
 ---
-*Last updated: {today's date} after analysis via /azdev-plan*
+*Generated by /azdev-plan — {today's date}*
 ```
 
 Formatting rules:
-- Strip all HTML from description and acceptanceCriteria before writing (already done by azdev-tools.cjs stripHtml for sprint items; acceptance criteria from `get-sprint-items` is already plain text).
-- If acceptanceCriteria is empty or null, omit the acceptance criteria checkboxes — just include the child task checkboxes.
-- If description is empty, write "(No description provided)" in What This Is.
+- Strip all HTML from description and acceptanceCriteria.
+- If the story description contains specific details (file paths, class names, API info, contacts, config), extract them into the appropriate sections — do NOT just dump the description into "Background".
+- If acceptanceCriteria is empty, derive testable criteria from the child tasks and the verified understanding.
+- If the story has NO description and NO acceptance criteria, mark it clearly: "Insufficient detail — requires manual clarification before implementation."
 - Do NOT include any HTML tags in the generated file.
+- The "Open Questions & Blockers" section must NEVER be empty when the story description mentions unresolved items (e.g., "afklaring af...", "åbent:", "TBD", "TODO").
 
-**Step 9 — Generate ROADMAP.md for each target repo:**
+**Step 11 — Present for approval:**
 
-Use the `Write` tool to create `{repoPath}/.planning/ROADMAP.md`.
+After generating STORY.md, show the user the full content. Use `AskUserQuestion`:
 
-**IMPORTANT:** Use the **verified work type** from Step 5.5 to decide the roadmap structure:
-- **Code change**: Generate full phase details with implementation plans.
-- **Manual/operational**: Generate a simplified roadmap noting the work is manual — no detailed code phases needed. Include a single "Execute manual steps" phase.
-- **Blocked**: Note the blocker in the overview and generate a single "Unblock and implement" phase.
+"Review the generated story spec:
 
-Map Azure DevOps fields:
-```markdown
-# Roadmap: {story.title}
+STORY.md has been written to {repoPath}/.planning/stories/{storyId}.md
 
-## Overview
-
-This roadmap tracks the implementation of Azure DevOps story #{story.id}: {story.title}, as part of sprint {sprintName}. The work is organized into phases based on the acceptance criteria and child tasks.
-
-{If work type is Manual/operational: "Note: This story involves manual/operational work, not code changes. Phases reflect manual steps to complete."}
-{If work type is Blocked: "Note: This story is currently blocked. Phase 1 focuses on resolving the blocker."}
-
-## Phases
-
-- [ ] **Phase 1: Implementation** - {Use verified understanding to write a more accurate phase description}
-
-## Phase Details
-
-### Phase 1: Implementation
-**Goal**: {Use verified understanding to write an accurate goal}
-**Depends on**: Nothing (first phase)
-**Requirements**: [{requirement IDs from REQUIREMENTS.md, e.g., REQ-01, REQ-02}]
-**Success Criteria** (what must be TRUE):
-{For each acceptance criterion:}
-  1. {criterion text}
-**Plans**: TBD
-
-Plans:
-- [ ] 01-01: Initial implementation
-
-## Progress
-
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Implementation | 0/1 | Not started | - |
-```
-
-Adapt the phase structure if child tasks naturally group into multiple phases (e.g., separate frontend/backend phases). Keep it simple — single story = 1-2 phases is the default.
-
-**Step 10 — Generate REQUIREMENTS.md for each target repo:**
-
-Use the `Write` tool to create `{repoPath}/.planning/REQUIREMENTS.md`.
-
-Derive requirement IDs from acceptance criteria and child tasks. Format:
-
-```markdown
-# Requirements: {repoName}
-
-## Active Requirements
-
-| ID | Description | Source | Status |
-|----|-------------|--------|--------|
-| REQ-01 | {first acceptance criterion or child task} | AzDO #{story.id} | Active |
-| REQ-02 | {second criterion} | AzDO #{story.id} | Active |
-
-## Requirement Details
-
-### REQ-01: {short name}
-
-**Description**: {full criterion text}
-**Source**: Azure DevOps story #{story.id}, acceptance criteria
-**Status**: Active
-**Acceptance**: {same criterion text}
-
----
-*Generated from Azure DevOps sprint analysis via /azdev-plan*
-*Sprint: {sprintName}*
-*Story: #{story.id} -- {story.title}*
-```
-
-Number requirements sequentially (REQ-01, REQ-02, ...). Use acceptance criteria first, then child task titles for any remaining requirements.
-
-**Step 11 — Present for approval per repo:**
-
-After generating the three files for a repo, show the user the generated content. Use `AskUserQuestion`:
-
-"Review the generated project for {repoName}:
-
-PROJECT.md has been written to {repoPath}/.planning/PROJECT.md
-ROADMAP.md has been written to {repoPath}/.planning/ROADMAP.md
-REQUIREMENTS.md has been written to {repoPath}/.planning/REQUIREMENTS.md
-
-[Show key sections: What This Is, Core Value, Requirements Active list, Roadmap phases]
+[Show the full STORY.md content]
 
 Approve, request changes, or skip? (approve/changes/skip)"
 
-- If "approve": keep the written files, move to next repo.
-- If "changes": ask "What would you like to change?" then regenerate the affected files incorporating the feedback, and re-present for approval. Repeat until approved or skipped.
-- If "skip": delete the generated files (run `rm "{repoPath}/.planning/PROJECT.md" "{repoPath}/.planning/ROADMAP.md" "{repoPath}/.planning/REQUIREMENTS.md"` via Bash). Note the skip in the final summary.
+- If "approve": keep the file, move to next story.
+- If "changes": ask "What would you like to change?" then regenerate incorporating the feedback, and re-present for approval. Repeat until approved or skipped.
+- If "skip": delete the file. Note the skip in the final summary.
 
 **Step 11.5 — Write azdev-task-map.json:**
 
@@ -417,8 +369,8 @@ After processing all repos, display:
 ```
 === Analysis Complete ===
 
-Projects bootstrapped:
-  #{storyId} {storyTitle} → {repoName}: {repoPath}/.planning/ (approved)
+Stories planned:
+  #{storyId} {storyTitle} → {repoPath}/.planning/stories/{storyId}.md (approved)
 
 Skipped:
   #{storyId} {storyTitle}: user skipped
@@ -426,8 +378,7 @@ Skipped:
 Task map written to: $CWD/.planning/azdev-task-map.json
 
 Next steps:
-  Navigate to each target repo to begin implementation.
-  Use azdev-task-map.json to track and update task status in Azure DevOps.
+  Run `/azdev-execute {storyId}` to implement a story.
 ```
 
 If `singleStoryMode`: simplify the summary to just show the single story result.
@@ -458,7 +409,8 @@ If `singleStoryMode`: simplify the summary to just show the single story result.
 - Repo choice is stored in azdev-task-map.json for use during execution
 - Each story is interactively verified with the user before file generation (Step 5.5)
 - Verified analysis replaces the story description in Azure DevOps (Step 5.6)
-- PROJECT.md, ROADMAP.md, and REQUIREMENTS.md use the verified understanding (not raw AzDO data)
+- STORY.md contains specific, concrete details (file paths, class names, contacts, blockers) — not generic placeholders
+- Open questions and blockers from the story description are explicitly captured
 - Stories are correctly categorized by work type (code change vs manual/operational vs blocked)
 - User can approve or request changes per repo before files are finalized
 - No HTML artifacts appear in any generated file

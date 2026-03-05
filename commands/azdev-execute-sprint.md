@@ -108,12 +108,10 @@ Display:
 
 Execute Steps 2a–2g below. If any step encounters a non-fatal error, log it and continue to the next step or next story. Collect the outcome in `sprintResults`.
 
-  **Step 2a — Load project plan:**
+  **Step 2a — Load story spec:**
 
-  1. Read `{repoPath}/.planning/PROJECT.md`.
-     If missing: log error "No PROJECT.md at {repoPath}/.planning/", record story as "skipped — no project plan", continue to next story.
-  2. Read `{repoPath}/.planning/ROADMAP.md`. If missing: warn but continue.
-  3. Read `{repoPath}/.planning/REQUIREMENTS.md`. If missing: warn but continue.
+  1. Read `{repoPath}/.planning/stories/{storyId}.md`.
+     If missing: log error "No story spec at {repoPath}/.planning/stories/{storyId}.md", record story as "skipped — no story spec", continue to next story.
 
   **Step 2b — Create feature branch:**
 
@@ -135,20 +133,19 @@ Execute Steps 2a–2g below. If any step encounters a non-fatal error, log it an
 
   **Step 2d — Execute the work:**
 
-  This is the main implementation phase. The analysis is ALREADY DONE — PROJECT.md, ROADMAP.md, and REQUIREMENTS.md contain everything needed. Do NOT re-analyze the codebase.
+  This is the main implementation phase. The story spec (`stories/{storyId}.md`) contains everything needed: goal, acceptance criteria, key files, implementation notes, and open questions. Do NOT re-analyze the codebase.
 
   1. Use `{repoPath}` as working directory for all file operations.
-  2. Follow ROADMAP.md phases in order. The plan already describes exactly what to do.
-  3. For each phase:
-     - Read ONLY the specific files you need to edit (the plan tells you which ones).
-     - Implement changes using Edit/Write tools.
-     - Run tests/build if available (check package.json scripts, Makefile, etc.).
-     - Mark phase complete in ROADMAP.md (`- [ ]` → `- [x]`).
-  4. Match completed work to Azure DevOps tasks from `taskTitles`.
-  5. On blockers: make your best judgment call and proceed. Log any assumptions made. Do NOT ask the user.
-  6. Commit after meaningful chunks. Use descriptive messages: "feat: {description} (#{storyId})".
+  2. Follow the implementation notes and acceptance criteria from the story spec.
+  3. Read ONLY the specific files mentioned in the "Key Files" section or that you need to edit.
+  4. Implement changes using Edit/Write tools.
+  5. Run tests/build if available (check package.json scripts, Makefile, etc.).
+  6. Match completed work to Azure DevOps tasks from `taskTitles`.
+  7. If the story spec has "Open Questions & Blockers": skip blocked items, implement what you can.
+  8. On other blockers: make your best judgment call and proceed. Log any assumptions made. Do NOT ask the user.
+  9. Commit after meaningful chunks. Use descriptive messages: "feat: {description} (#{storyId})".
 
-  IMPORTANT: Do NOT spend time exploring or understanding the codebase broadly. The `/azdev-plan` command already did that and wrote the project plans. Trust the plans. Only read files you are about to modify.
+  IMPORTANT: Do NOT spend time exploring or understanding the codebase broadly. The `/azdev-plan` command already did that and wrote the story spec. Trust the spec. Only read files you are about to modify.
 
   **Step 2e — Auto-resolve activated tasks:**
 
@@ -214,7 +211,7 @@ Next steps:
 
 **Per-story error handling:**
 
-- Missing PROJECT.md: Skip the story. Record as "skipped — no project plan".
+- Missing story spec: Skip the story. Record as "skipped — no story spec".
 - Git errors (dirty tree, missing branch, merge conflicts): Attempt `git stash`, retry. If still failing, skip the story and record the error.
 - `update-state` failures: Log and continue. Non-blocking.
 - PR creation failure: Log error. Branch is already pushed, so record "PR not created" and move on.

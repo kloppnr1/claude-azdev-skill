@@ -79,10 +79,10 @@ azdev-task-map.json structure (written by /azdev-analyze):
    If exit 1: tell user "No Azure DevOps config found. Run `/azdev-setup` to configure your connection." Stop.
 
 3. Check that `$CWD/.planning/azdev-task-map.json` exists via Bash `test -f`.
-   If missing: tell user "No task map found. Run `/azdev-analyze` first to analyze your sprint stories and generate project plans." Stop.
+   If missing: tell user "No task map found. Run `/azdev-plan` first to analyze your sprint stories." Stop.
 
 4. Read `$CWD/.planning/azdev-task-map.json` using the Read tool. Parse the JSON.
-   If the `mappings` array is empty: tell user "Task map has no approved story mappings. Run `/azdev-analyze` and approve at least one repo." Stop.
+   If the `mappings` array is empty: tell user "Task map has no story mappings. Run `/azdev-plan` and approve at least one story." Stop.
 
 **Step 2 — Select story to execute:**
 
@@ -98,16 +98,12 @@ If no argument was passed:
 
 Store the selected mapping as `current`.
 
-**Step 3 — Load project plan:**
+**Step 3 — Load story spec:**
 
-1. Read `{current.repoPath}/.planning/PROJECT.md` using the Read tool.
-   If missing: tell user "No PROJECT.md found at {current.repoPath}/.planning/. Run `/azdev-analyze` to generate it." Stop.
+1. Read `{current.repoPath}/.planning/stories/{current.storyId}.md` using the Read tool.
+   If missing: tell user "No story spec found at {current.repoPath}/.planning/stories/{current.storyId}.md. Run `/azdev-plan {current.storyId}` to generate it." Stop.
 
-2. Read `{current.repoPath}/.planning/ROADMAP.md` using the Read tool.
-   If missing: warn user but continue — the roadmap is helpful but not strictly required.
-
-3. Read `{current.repoPath}/.planning/REQUIREMENTS.md` using the Read tool.
-   If missing: warn user but continue.
+2. Parse the story spec — it contains goal, acceptance criteria, technical context (key files, architecture), implementation notes, open questions, and tasks. This is your single source of truth for the implementation.
 
 **Step 4 — Create feature branch:**
 
@@ -137,7 +133,7 @@ Task status updates:
 
 **Step 6 — Execute the work:**
 
-This is the main implementation phase. The analysis is ALREADY DONE — PROJECT.md, ROADMAP.md, and REQUIREMENTS.md contain everything you need. Do NOT re-analyze the codebase.
+This is the main implementation phase. The story spec (`stories/{current.storyId}.md`) contains everything you need: goal, acceptance criteria, key files, implementation notes, and open questions. Do NOT re-analyze the codebase.
 
 1. **Navigate to the target repo**: Use `{current.repoPath}` as the working directory for all file operations.
 
