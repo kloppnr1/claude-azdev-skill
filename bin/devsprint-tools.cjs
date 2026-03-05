@@ -1864,7 +1864,8 @@ async function cmdGetPr(cwd, args) {
 async function cmdGetPrThreads(cwd, args) {
   const repoNameIdx = args.indexOf('--repo-name');
   const prIdIdx = args.indexOf('--pr-id');
-  const activeOnly = args.includes('--active-only');
+  const activeOnly = args.includes('--active-only');    // legacy alias
+  const unresolvedOnly = args.includes('--unresolved') || activeOnly;
 
   let repoName = repoNameIdx !== -1 ? args[repoNameIdx + 1] : null;
   const prId = prIdIdx !== -1 ? args[prIdIdx + 1] : null;
@@ -1950,8 +1951,8 @@ async function cmdGetPrThreads(cwd, args) {
         return result;
       });
 
-    if (activeOnly) {
-      threads = threads.filter(t => t.status === 'active');
+    if (unresolvedOnly) {
+      threads = threads.filter(t => t.status === 'active' || t.status === 'pending');
     }
 
     // Filter out empty threads (no user comments)

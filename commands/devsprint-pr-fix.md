@@ -37,11 +37,11 @@ devsprint-tools.cjs CLI contracts used by this command:
     -> Returns the most recent matching PR (active PRs preferred over completed)
     -> stdout: JSON {"prId":N,"title":"...","description":"...","status":"...","sourceBranch":"...","targetBranch":"...","createdBy":"...","repoName":"...","url":"...","workItemIds":[...]}
 
-  node ~/.claude/bin/devsprint-tools.cjs get-pr-threads --pr-id <id> --repo-name <name> [--active-only] --cwd $CWD
+  node ~/.claude/bin/devsprint-tools.cjs get-pr-threads --pr-id <id> --repo-name <name> [--unresolved] --cwd $CWD
     -> Fetches comment threads on a PR (repo-name required here, obtained from find-pr)
     -> stdout: JSON {"repoName":"...","threads":[{"threadId":N,"status":"active|fixed|closed|...","comments":[{"author":"...","content":"...","publishedDate":"..."}],"filePath":"/src/...", "lineNumber":N}]}
     -> filePath and lineNumber are only present for file-level comments
-    -> --active-only: filter to threads with status "active"
+    -> --unresolved: filter to threads with status "active"
 </context>
 
 <process>
@@ -78,11 +78,11 @@ If status is "completed" or "abandoned": warn "PR is already {status}. Continue 
 
 **Step 4 — Fetch PR comment threads:**
 
-Run: `node ~/.claude/bin/devsprint-tools.cjs get-pr-threads --pr-id {prId} --repo-name {repoName} --active-only --cwd $CWD`
+Run: `node ~/.claude/bin/devsprint-tools.cjs get-pr-threads --pr-id {prId} --repo-name {repoName} --unresolved --cwd $CWD`
 
 Parse the JSON. Extract `threads` array from the response.
 
-If no active threads: display "No active review comments on this PR. Nothing to fix." Stop.
+If no active threads: display "No unresolved review comments on this PR. Nothing to fix." Stop.
 
 **Step 5 — Present issues to user:**
 
@@ -106,7 +106,7 @@ General:
 ```
 
 Use `AskUserQuestion`:
-- Question: "Fix all active comments, or select specific ones?"
+- Question: "Fix all unresolved comments, or select specific ones?"
 - Options: "Fix all" / "Let me select"
 
 If "Let me select": present each comment and let user include/exclude. Store the selected thread IDs.
@@ -181,7 +181,7 @@ Next steps:
 <error_handling>
 
 - No PR found for story: "No PR found for story #{storyId}. The PR title should start with '#{storyId}'."
-- No active comments: "No active review comments. Nothing to fix."
+- No unresolved comments: "No unresolved review comments. Nothing to fix."
 - Branch checkout fails: try `git stash` first, then retry. If still failing, show error.
 - File from comment not found locally: warn "File {filePath} from review comment not found in repo. It may have been deleted or renamed." Skip that comment.
 - Test failures after fix: warn user, ask whether to continue or stop.
@@ -189,8 +189,8 @@ Next steps:
 </error_handling>
 
 <success_criteria>
-- `/devsprint-pr-fix 42917` finds the PR by story ID and fetches active comments
-- User sees all active review comments grouped by file
+- `/devsprint-pr-fix 42917` finds the PR by story ID and fetches unresolved comments
+- User sees all unresolved review comments grouped by file
 - User can fix all or select specific comments
 - PR branch is checked out and tests verified before changes
 - Each fix is committed separately with descriptive message
