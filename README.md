@@ -8,8 +8,7 @@ Azure DevOps sprint integration for [Claude Code](https://docs.anthropic.com/en/
 /azdev-setup            →  Connect to Azure DevOps (one-time)
 /azdev-sprint           →  See your sprint backlog (default: your items, --all for everything)
 /azdev-plan [story-id]   →  Analyze stories → pick repos → verify → generate plans
-/azdev-execute [story-id] → Execute one story → feature branch → PR to develop
-/azdev-execute-sprint   →  Execute ALL stories autonomously → zero interaction
+/azdev-execute [story-id] → Execute one story (interactive) or all stories (autonomous)
 ```
 
 **The typical workflow:**
@@ -97,13 +96,14 @@ The main analysis pipeline. Run without arguments to plan all assigned stories, 
 6. Generates a story spec at `.planning/stories/{storyId}.md` in each target repo
 7. Writes/merges `.planning/azdev-task-map.json` — maps DevOps work item IDs to repos for status tracking
 
-### `/azdev-execute`
+### `/azdev-execute [story-id]`
 
-Execute the story spec for a single story. Creates a **feature branch** from develop, sets tasks to **Active**, implements the work described in the story spec, auto-resolves tasks and story when done, pushes the branch, and creates a **PR to develop** via the Azure DevOps REST API. The PR is automatically **linked to the Azure DevOps story** via `workItemRefs`. Only asks for input when selecting between multiple stories or hitting implementation blockers.
+Execute story plans. Two modes depending on arguments:
 
-### `/azdev-execute-sprint`
+- **`/azdev-execute 42920`** — single story, interactive. Creates a feature branch, implements the story spec, resolves tasks, creates a PR. Asks for input on blockers.
+- **`/azdev-execute`** — all stories, fully autonomous. Loops through every story in the task map without user interaction. Errors on one story don't block the next. Outputs a full summary with all PR links at the end.
 
-Fully autonomous mode — executes **all stories** in the task map sequentially without any user interaction. Each story gets its own feature branch and PR (created via Azure DevOps REST API, linked to the story). Errors on one story don't block the next. Outputs a full sprint summary with all PR links at the end.
+PRs are created via the Azure DevOps REST API and automatically **linked to the story** via `workItemRefs`.
 
 ## Status tracking
 
@@ -165,8 +165,7 @@ claude-azdev-skill/
 │   ├── azdev-test.md             # /azdev-test — connection verification
 │   ├── azdev-sprint.md           # /azdev-sprint — sprint backlog display
 │   ├── azdev-plan.md             # /azdev-plan — story analysis & project bootstrap
-│   ├── azdev-execute.md          # /azdev-execute — single story execution
-│   └── azdev-execute-sprint.md   # /azdev-execute-sprint — full sprint execution
+│   └── azdev-execute.md          # /azdev-execute — story execution (single or all)
 └── README.md
 ```
 

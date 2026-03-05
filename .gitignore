@@ -1,3 +1,4 @@
 # Credentials (never commit PAT)
 .planning/azdev-config.json
 .planning/azdo-config.json
+.planning/

@@ -1,6 +1,6 @@
 ---
 name: azdev-execute
-description: Execute project plans and update Azure DevOps task status automatically
+description: Execute story plans and update Azure DevOps task status automatically
 argument-hint: "[story-id]"
 allowed-tools:
   - Read
@@ -14,7 +14,11 @@ allowed-tools:
 ---
 
 <objective>
-Execute the story spec for one or more analyzed stories. For each story: create a feature branch, navigate to the target repo, set tasks to Active in Azure DevOps, implement the work described in the story spec, auto-resolve tasks and story when complete, and create a PR to develop.
+Execute one or all stories from the task map. For each story: create a feature branch, activate tasks in Azure DevOps, implement the work from the story spec, auto-resolve tasks and story, push, and create a PR.
+
+**Mode depends on arguments:**
+- With story ID (`/azdev-execute 42920`): single-story mode — interactive, can ask user questions on blockers.
+- Without arguments (`/azdev-execute`): all-stories mode — autonomous loop, never asks questions, skips blockers and moves to next story.
 </objective>
 
 <execution_context>
@@ -70,7 +74,18 @@ azdev-task-map.json structure (written by /azdev-plan):
 
 <process>
 
-**Step 1 — Check prerequisites:**
+**Step 1 — Parse arguments and determine mode:**
+
+Check if the user passed a story ID as argument (e.g., `/azdev-execute 42920` or `/azdev-execute #42920`).
+
+- If a numeric ID is provided: `mode = "single"`, `targetStoryId = <the ID>`.
+- If no argument: `mode = "all"`.
+
+**Behavioral rules by mode:**
+- `single` mode: interactive. Use `AskUserQuestion` when encountering blockers or ambiguity during implementation. Stop on errors.
+- `all` mode: fully autonomous. Do NOT use `AskUserQuestion` at any point. If you encounter a blocker on one story, log the error and move on to the next story. The user expects to walk away and come back to completed work.
+
+**Step 2 — Check prerequisites:**
 
 1. Verify `~/.claude/bin/azdev-tools.cjs` exists via Bash `test -f`.
    If missing: tell user "Azure DevOps tools not installed. Check that ~/.claude/bin/azdev-tools.cjs exists." Stop.
@@ -84,168 +99,196 @@ azdev-task-map.json structure (written by /azdev-plan):
 4. Read `$CWD/.planning/azdev-task-map.json` using the Read tool. Parse the JSON.
    If the `mappings` array is empty: tell user "Task map has no story mappings. Run `/azdev-plan` and approve at least one story." Stop.
 
-**Step 2 — Select story to execute:**
+**Step 3 — Select stories to execute:**
 
-If the user passed a story ID as argument:
-- Find the mapping where `storyId` matches. If not found: "Story #{id} is not in the task map. Available stories: {list}." Stop.
+If `mode === "single"`:
+- Find the mapping where `storyId` matches `targetStoryId`. If not found: "Story #{targetStoryId} is not in the task map. Available stories: {list}." Stop.
+- Store as a single-item list: `storiesToExecute = [matching mapping]`.
 
-If no argument was passed:
-- If there is exactly 1 mapping: use it automatically.
-- If there are multiple mappings: present a selection using `AskUserQuestion`:
-  "Which story do you want to execute?"
-  Options: one per mapping, labeled "#{storyId} -- {storyTitle} ({repoPath})"
-  The user selects one.
-
-Store the selected mapping as `current`.
-
-**Step 2.5 — Check story state in Azure DevOps:**
-
-Run `node ~/.claude/bin/azdev-tools.cjs check-children --id {current.storyId} --cwd $CWD` to get the current state.
-
-Also fetch the story's own state from the sprint items:
-Run `node ~/.claude/bin/azdev-tools.cjs get-sprint-items --me --cwd $CWD` and find the item matching `current.storyId`.
-
-- If the story state is "Resolved", "Closed", or "Done": display "Story #{current.storyId} is already {state}. Nothing to execute." Stop.
-- If `allResolved === true` (all child tasks resolved): display "All tasks for story #{current.storyId} are already resolved. Nothing to execute." Stop.
-- If some tasks are already resolved: note which ones and only activate/work on the remaining tasks. Display: "Skipping {N} already resolved tasks. Working on {M} remaining."
-
-**Step 3 — Load story spec:**
-
-1. Read `{current.repoPath}/.planning/stories/{current.storyId}.md` using the Read tool.
-   If missing: tell user "No story spec found at {current.repoPath}/.planning/stories/{current.storyId}.md. Run `/azdev-plan {current.storyId}` to generate it." Stop.
-
-2. Parse the story spec — it contains goal, acceptance criteria, technical context (key files, architecture), implementation notes, open questions, and tasks. This is your single source of truth for the implementation.
-
-**Step 4 — Create feature branch:**
-
-Run: `node ~/.claude/bin/azdev-tools.cjs create-branch --repo {current.repoPath} --story-id {current.storyId} --title "{current.storyTitle}"`
-
-- If exit 0: parse JSON. Store `branch` as `current.branchName` and `base` as `current.baseBranch`.
-  - If `created === true`: "Created branch {branch} from {base}"
-  - If `created === false`: "Checked out existing branch {branch}"
-- If exit 1: show error and stop.
-
-**Step 5 — Activate tasks in Azure DevOps:**
-
-Track which task IDs are successfully activated in a list called `activatedTaskIds`.
-
-For each task ID in `current.taskIds`:
-1. Run `node ~/.claude/bin/azdev-tools.cjs update-state --id {taskId} --state "Active" --cwd $CWD`
-2. If exit 0: add to `activatedTaskIds` and note success.
-3. If exit 1: warn user but continue. The task may already be Active or in a state that doesn't allow transition to Active (e.g., already Resolved). This is non-blocking. Do NOT add to `activatedTaskIds`.
-
-Display a brief status:
-```
-Task status updates:
-  #{taskId} ({taskTitle}): Active ✓
-  #{taskId} ({taskTitle}): Active ✓
-  #{taskId} ({taskTitle}): already Active (skipped)
-```
-
-**Step 6 — Execute the work:**
-
-This is the main implementation phase. The story spec (`stories/{current.storyId}.md`) contains everything you need: goal, acceptance criteria, key files, implementation notes, and open questions. Do NOT re-analyze the codebase.
-
-1. **Navigate to the target repo**: Use `{current.repoPath}` as the working directory for all file operations.
-
-2. **Follow the story spec**: Use the acceptance criteria and implementation notes as your guide. The spec describes exactly what to do.
-
-3. **For each piece of work**:
-   - Read ONLY the specific files listed in the "Key Files" section or that you need to edit.
-   - Implement the changes described in the implementation notes using Edit/Write tools.
-   - Run any tests or build commands if the project has them (check package.json scripts, Makefile, etc.).
-
-4. **Match tasks to work**: As you complete work that corresponds to a specific Azure DevOps task (from `current.taskTitles`), note which tasks have been completed.
-
-5. **Handle issues**: If you encounter blockers or need clarification, use `AskUserQuestion` to consult the user. Do not guess at requirements.
-
-6. **Commit changes**: After meaningful chunks of work, commit changes via git. Use descriptive commit messages referencing the story ID (e.g., "feat: implement API endpoint for #{storyId}"). Do NOT ask the user — just commit directly on the feature branch.
-
-IMPORTANT: Do NOT spend time exploring or understanding the codebase broadly. The `/azdev-plan` command already did that analysis and wrote the story spec. Trust the spec. Only read files that you are about to modify.
-
-**Step 7 — Auto-resolve activated tasks:**
-
-After the implementation work is done, automatically resolve the tasks that were activated in Step 5:
-
-For each task ID in `activatedTaskIds`:
-1. Run `node ~/.claude/bin/azdev-tools.cjs update-state --id {taskId} --state "Resolved" --cwd $CWD`
-2. If exit 0: note success.
-3. If exit 1: warn user with error details.
+If `mode === "all"`:
+- Use all mappings: `storiesToExecute = mappings`.
 
 Display:
 ```
-Task resolution:
-  #{taskId} ({taskTitle}): Resolved ✓
-  #{taskId} ({taskTitle}): Resolved ✓
+=== Execution: {sprintName} ===
+Mode: {single ? "Single story" : "All stories (autonomous)"}
+Stories: {storiesToExecute.length}
+  {for each: "#{storyId} — {storyTitle} ({repoPath})"}
+
+{mode === "all" ? "Starting autonomous execution..." : ""}
 ```
 
-**Step 8 — Auto-resolve story if all tasks done:**
+Initialize an empty `executionResults` list to collect per-story outcomes.
 
-After resolving tasks, check if the parent story can be resolved:
+**Step 4 — Execute each story:**
 
-Run `node ~/.claude/bin/azdev-tools.cjs get-child-states --id {current.storyId} --cwd $CWD`
-- Parse the JSON result.
-- If `allResolved === true`:
-  Automatically resolve the story:
-  Run `node ~/.claude/bin/azdev-tools.cjs update-state --id {current.storyId} --state "Resolved" --cwd $CWD`
-  Display: "Story #{current.storyId} resolved ✓"
-
-- If `allResolved === false`:
-  Display remaining open tasks:
-  ```
-  Story #{current.storyId} still has open tasks:
-    #{childId} -- {childTitle} ({childState})
-  ```
-
-**Step 9 — Push and create PR to develop:**
-
-Build a PR body string containing:
-```
-## Azure DevOps Story
-#{current.storyId} — {current.storyTitle}
-
-## Changes
-{Brief summary of what was implemented, based on the story spec}
-
-## Tasks resolved
-- #{taskId} — {taskTitle}
-- #{taskId} — {taskTitle}
-
-## Test plan
-- [ ] Verify acceptance criteria from story
-- [ ] Run automated tests
-- [ ] Code review
-```
-
-Run: `node ~/.claude/bin/azdev-tools.cjs create-pr --repo {current.repoPath} --branch {current.branchName} --base {current.baseBranch} --title "#{current.storyId} {current.storyTitle}" --body "{prBody}" --story-id {current.storyId} --cwd $CWD`
-
-- If exit 0: parse JSON. Store `pr` URL for the summary. PR is automatically linked to the story.
-- If exit 1: warn user. The branch may already be pushed — suggest creating PR manually in Azure DevOps.
-
-**Step 10 — Final summary:**
+For each mapping in `storiesToExecute` (index `i`, starting at 1):
 
 Display:
 ```
-=== Execution Summary ===
+━━━ [{i}/{total}] Story #{storyId} — {storyTitle} ━━━
+```
 
-Story: #{current.storyId} -- {current.storyTitle}
-Repo: {current.repoPath}
-Branch: {current.branchName}
+Execute Steps 4a–4h below. In `all` mode: if any step encounters a non-fatal error, log it and continue to the next step or next story. In `single` mode: stop on errors and consult the user.
 
-Tasks resolved: {count}/{total}
-  #{taskId} -- {taskTitle}: Resolved
-  #{taskId} -- {taskTitle}: Active (remaining)
+  **Step 4a — Check story state:**
 
-Story status: {Resolved | Active (X tasks remaining)}
+  Run `node ~/.claude/bin/azdev-tools.cjs get-child-states --id {storyId} --cwd $CWD` to check current state.
 
-PR: {prUrl}
+  Also fetch the story's own state from the sprint items:
+  Run `node ~/.claude/bin/azdev-tools.cjs get-sprint-items --me --cwd $CWD` and find the item matching `storyId`.
 
-Files modified:
-  {list of files changed during execution}
+  - If the story state is "Resolved", "Closed", or "Done": log "Story #{storyId} already resolved — skipping", record as "skipped — already resolved", continue to next story.
+  - If `allResolved === true`: log "All tasks for #{storyId} already resolved — skipping", record as "skipped — all tasks resolved", continue to next story.
+  - If some tasks are already resolved: note which ones. Only activate and work on the remaining tasks in subsequent steps. Display: "Skipping {N} already resolved tasks. Working on {M} remaining."
+
+  **Step 4b — Load story spec:**
+
+  1. Read `{repoPath}/.planning/stories/{storyId}.md` using the Read tool.
+     If missing:
+     - `single` mode: tell user "No story spec found. Run `/azdev-plan {storyId}` to generate it." Stop.
+     - `all` mode: log error, record as "skipped — no story spec", continue to next story.
+
+  2. Parse the story spec — it contains goal, acceptance criteria, technical context (key files, architecture), implementation notes, open questions, and tasks. This is your single source of truth for the implementation.
+
+  **Step 4c — Create feature branch:**
+
+  Run: `node ~/.claude/bin/azdev-tools.cjs create-branch --repo {repoPath} --story-id {storyId} --title "{storyTitle}"`
+
+  - If exit 0: parse JSON. Store `branch` as `branchName` and `base` as `baseBranch`.
+    - If `created === true`: "Created branch {branch} from {base}"
+    - If `created === false`: "Checked out existing branch {branch}"
+  - If exit 1:
+    - `single` mode: show error and stop.
+    - `all` mode: log error, record as "skipped — branch creation failed", continue to next story.
+
+  **Step 4d — Activate tasks in Azure DevOps:**
+
+  Track which task IDs are successfully activated in a list called `activatedTaskIds`.
+
+  For each task ID in `taskIds` (skip already-resolved tasks from Step 4a):
+  1. Run `node ~/.claude/bin/azdev-tools.cjs update-state --id {taskId} --state "Active" --cwd $CWD`
+  2. If exit 0: add to `activatedTaskIds`.
+  3. If exit 1: warn but continue. The task may already be Active or in a non-transitionable state. Do NOT add to `activatedTaskIds`.
+
+  Display:
+  ```
+  Task status updates:
+    #{taskId} ({taskTitle}): Active ✓
+    #{taskId} ({taskTitle}): already Active (skipped)
+  ```
+
+  **Step 4e — Execute the work:**
+
+  This is the main implementation phase. The story spec contains everything needed: goal, acceptance criteria, key files, implementation notes, and open questions. Do NOT re-analyze the codebase.
+
+  1. **Navigate to the target repo**: Use `{repoPath}` as the working directory for all file operations.
+
+  2. **Follow the story spec**: Use the acceptance criteria and implementation notes as your guide.
+
+  3. **For each piece of work**:
+     - Read ONLY the specific files listed in the "Key Files" section or that you need to edit.
+     - Implement the changes described in the implementation notes using Edit/Write tools.
+     - Run any tests or build commands if the project has them (check package.json scripts, Makefile, etc.).
+
+  4. **Match tasks to work**: As you complete work that corresponds to a specific Azure DevOps task (from `taskTitles`), note which tasks have been completed.
+
+  5. **Handle blockers**:
+     - `single` mode: use `AskUserQuestion` to consult the user. Do not guess at requirements.
+     - `all` mode: make your best judgment call and proceed. Log any assumptions. Do NOT ask the user.
+     - If the story spec has "Open Questions & Blockers": skip blocked items, implement what you can.
+
+  6. **Commit changes**: After meaningful chunks of work, commit changes via git. Use descriptive commit messages referencing the story ID (e.g., "feat: implement API endpoint for #{storyId}"). Do NOT ask — just commit directly on the feature branch.
+
+  IMPORTANT: Do NOT spend time exploring or understanding the codebase broadly. The `/azdev-plan` command already did that analysis and wrote the story spec. Trust the spec. Only read files that you are about to modify.
+
+  **Step 4f — Auto-resolve activated tasks:**
+
+  For each task ID in `activatedTaskIds`:
+  1. Run `node ~/.claude/bin/azdev-tools.cjs update-state --id {taskId} --state "Resolved" --cwd $CWD`
+  2. Log result.
+
+  Display:
+  ```
+  Task resolution:
+    #{taskId} ({taskTitle}): Resolved ✓
+    #{taskId} ({taskTitle}): Resolved ✓
+  ```
+
+  **Step 4g — Auto-resolve story if all tasks done:**
+
+  Run `node ~/.claude/bin/azdev-tools.cjs get-child-states --id {storyId} --cwd $CWD`
+  - If `allResolved === true`:
+    Run `node ~/.claude/bin/azdev-tools.cjs update-state --id {storyId} --state "Resolved" --cwd $CWD`
+    Display: "Story #{storyId} resolved ✓"
+  - If `allResolved === false`:
+    Display remaining open tasks:
+    ```
+    Story #{storyId} still has open tasks:
+      #{childId} -- {childTitle} ({childState})
+    ```
+
+  **Step 4h — Push and create PR:**
+
+  Build a PR body string containing:
+  ```
+  ## Azure DevOps Story
+  #{storyId} — {storyTitle}
+
+  ## Changes
+  {Brief summary of what was implemented, based on the story spec}
+
+  ## Tasks resolved
+  - #{taskId} — {taskTitle}
+  - #{taskId} — {taskTitle}
+
+  ## Test plan
+  - [ ] Verify acceptance criteria from story
+  - [ ] Run automated tests
+  - [ ] Code review
+  ```
+
+  Run: `node ~/.claude/bin/azdev-tools.cjs create-pr --repo {repoPath} --branch {branchName} --base {baseBranch} --title "#{storyId} {storyTitle}" --body "{prBody}" --story-id {storyId} --cwd $CWD`
+
+  - If exit 0: parse JSON. Store `pr` URL in results. PR is automatically linked to the story.
+  - If exit 1:
+    - `single` mode: warn user. The branch is already pushed — suggest creating PR manually in Azure DevOps.
+    - `all` mode: log error. Record "PR not created" and move on.
+
+  Record story outcome: "completed" (with PR URL), "partial" (some tasks remain), or "skipped" (with reason).
+
+**Step 5 — Summary:**
+
+Display:
+```
+╔══════════════════════════════════════════╗
+║           Execution Complete             ║
+╚══════════════════════════════════════════╝
+
+Sprint: {sprintName}
+Stories processed: {total}
+
+{for each story in executionResults:}
+  {status icon} #{storyId} — {storyTitle}
+     Branch: {branchName}
+     Tasks: {resolvedCount}/{totalCount} resolved
+     Story: {Resolved ✓ | Active (X tasks remaining)}
+     PR: {prUrl | "not created — {reason}"}
+{end for}
+
+{If multiple stories:}
+Summary:
+  ✓ Completed: {count}
+  ◐ Partial:   {count}
+  ✗ Skipped:   {count}
+{end if}
+
+Pull requests:
+  {list of PR URLs}
 
 Next steps:
-  {If tasks remain: "Run `/azdev-execute` again to continue working on remaining tasks."}
-  {If story resolved: "Story complete! Review and merge the PR, then run `/azdev-sprint` to see updated sprint status."}
+  {If tasks remain: "Run `/azdev-execute {storyId}` to continue on remaining tasks."}
+  {If all resolved: "Review and merge the PRs, then run `/azdev-sprint` to see updated sprint status."}
 ```
 
 </process>
@@ -254,32 +297,42 @@ Next steps:
 
 **Common errors and responses:**
 
-- `update-state` returns exit 1 with "invalid state transition": The task may already be in the target state or in a state that doesn't allow the transition (e.g., Closed → Active). Warn the user but continue. Suggest checking the work item in Azure DevOps if the transition seems wrong.
+- `update-state` returns exit 1 with "invalid state transition": The task may already be in the target state or in a state that doesn't allow the transition (e.g., Closed → Active). Warn but continue. Non-blocking.
 
 - `update-state` returns 403: "Insufficient permissions. Your PAT may not have `vso.work_write` scope. Regenerate your PAT with `vso.work_write` and run `/azdev-setup`."
 
-- Task map references a repo path that no longer exists: Warn the user and ask for the correct path. If user cannot provide one, skip that story.
+- Task map references a repo path that no longer exists:
+  - `single` mode: warn the user and ask for the correct path.
+  - `all` mode: skip the story, record as "skipped — repo not found at {path}".
 
-- Story spec is missing but task map exists: The user may have deleted the spec. Tell them to re-run `/azdev-plan {storyId}` to regenerate.
+- Story spec is missing but task map exists: Tell user to run `/azdev-plan {storyId}` to regenerate.
 
-- Git operations fail in target repo: Warn user with error details. Continue with implementation if possible, or ask user to resolve the git issue manually.
+- Git operations fail in target repo: Attempt `git stash`, retry. If still failing:
+  - `single` mode: warn user with error details.
+  - `all` mode: skip the story, record the error.
 
-- `develop` branch does not exist on remote: Warn the user. Ask if they want to target a different base branch (e.g., `main`).
+- `develop` branch does not exist on remote:
+  - `single` mode: ask if user wants to target a different base branch.
+  - `all` mode: try `main` as fallback.
 
-- PR creation fails: Warn user with error. The branch is already pushed, so suggest creating the PR manually in Azure DevOps.
+- PR creation fails: Branch is already pushed. Suggest creating the PR manually in Azure DevOps.
+
+**In `all` mode only:** Never stop the loop for per-story errors. Only STOP the entire execution for:
+- Missing azdev-tools.cjs (nothing can work without it)
+- Missing config (no API access)
+- Missing or empty task map (nothing to execute)
 
 </error_handling>
 
 <success_criteria>
-- Task map is loaded and validated before any work begins
-- User selects which story to execute (or auto-selects if only one)
-- A feature branch is created from develop before any code changes
-- All child tasks are set to Active in Azure DevOps before implementation starts
-- Implementation follows the story spec (acceptance criteria + implementation notes)
-- Tasks that were activated are automatically resolved after implementation — no user prompt
-- Parent story is automatically resolved when all child tasks are resolved — no user prompt
-- Feature branch is pushed and a PR to develop is created
-- Clear summary shows what was done, PR link, and what remains
-- Non-blocking errors (failed state transitions) are warned but don't halt execution
-- User is only asked for input when selecting a story (multiple mappings) or when encountering blockers during implementation
+- `/azdev-execute 42920` runs a single story interactively
+- `/azdev-execute` runs all stories autonomously without user prompts
+- Already-resolved stories and tasks are skipped automatically
+- Each story gets its own feature branch from develop
+- Tasks are activated before work and resolved after — automatically
+- Stories are resolved when all children are resolved — automatically
+- Each story gets a PR linked to the Azure DevOps story
+- In `all` mode: errors on one story do not block the next
+- In `single` mode: user is consulted on blockers
+- Clear summary with PR links at the end
 </success_criteria>
