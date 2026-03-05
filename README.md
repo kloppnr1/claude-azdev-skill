@@ -7,9 +7,8 @@ Azure DevOps sprint integration for [Claude Code](https://docs.anthropic.com/en/
 ```
 /azdev-setup            →  Connect to Azure DevOps (one-time)
 /azdev-sprint           →  See your sprint backlog (default: your items, --all for everything)
-/azdev-plan             →  Analyze stories → pick repos → verify → generate plans
-/azdev-plan 42920       →  Plan a single story by ID
-/azdev-execute          →  Execute one story → feature branch → PR to develop
+/azdev-plan [story-id]   →  Analyze stories → pick repos → verify → generate plans
+/azdev-execute [story-id] → Execute one story → feature branch → PR to develop
 /azdev-execute-sprint   →  Execute ALL stories autonomously → zero interaction
 ```
 
