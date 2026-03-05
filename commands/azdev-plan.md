@@ -48,6 +48,11 @@ azdev-tools.cjs CLI contracts:
     -> Lists Git repositories in the Azure DevOps project
     -> exit 0 on success, exit 1 on error
 
+  node ~/.claude/bin/azdev-tools.cjs update-acceptance-criteria --id <workItemId> --criteria "<html>" --cwd $CWD
+    -> stdout: JSON {"status":"updated","id":N}
+    -> Updates the Acceptance Criteria field of a work item. Accepts HTML.
+    -> exit 0 on success, exit 1 on error
+
   node ~/.claude/bin/azdev-tools.cjs add-comment --id <workItemId> --text "<html>" --cwd $CWD
     -> stdout: JSON {"status":"created","id":N,"commentId":N}
     -> Adds a comment (Discussion) to a work item. Text accepts HTML for rich formatting.
@@ -293,6 +298,29 @@ node ~/.claude/bin/azdev-tools.cjs update-description --id {storyId} --descripti
 ```
 
 If update fails, warn the user but continue (non-blocking error). The verified understanding is still used locally for file generation.
+
+**Also update the Acceptance Criteria field** with user-friendly criteria (not technical). These should be written so a product owner or tester can verify them without reading code. Use simple HTML:
+
+```html
+<ul>
+<li>Bruger kan se {feature} i {location}</li>
+<li>{Observable outcome from user perspective}</li>
+</ul>
+```
+
+Rules for user-facing acceptance criteria:
+- Write in the same language as the story (Danish if story is Danish)
+- No file paths, class names, or technical implementation details
+- Focus on what the user sees/experiences, not how it's built
+- Each criterion should be verifiable by a non-developer
+- Include any blocked/skipped items with explanation
+
+Run:
+```
+node ~/.claude/bin/azdev-tools.cjs update-acceptance-criteria --id {storyId} --criteria "{html}" --cwd $CWD
+```
+
+If update fails, warn but continue (non-blocking).
 
 **Step 7 — Check for existing .planning/ in target repo:**
 

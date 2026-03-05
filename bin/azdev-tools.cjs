@@ -50,6 +50,12 @@
  *     stdout: JSON {"status":"updated","id":N}
  *     Exit 0 on success, exit 1 on error.
  *
+ *   update-acceptance-criteria --id <workItemId> --criteria "<html>" [--cwd <path>]
+ *     Updates the Acceptance Criteria field of a work item using the PATCH API.
+ *     The criteria field accepts HTML for rich formatting.
+ *     stdout: JSON {"status":"updated","id":N}
+ *     Exit 0 on success, exit 1 on error.
+ *
  *   update-state --id <workItemId> --state <state> [--cwd <path>]
  *     Changes the System.State field of a work item via the PATCH API.
  *     Uses op:add on /fields/System.State per Azure DevOps API convention.
@@ -817,6 +823,56 @@ async function cmdUpdateDescription(cwd, args) {
     } else {
       const errorBody = res.body ? JSON.parse(res.body) : {};
       throw new Error(`Failed to update work item ${id}: HTTP ${res.status} — ${errorBody.message || res.body}`);
+    }
+  } catch (err) {
+    console.error(err.message);
+    process.exit(1);
+  }
+}
+
+/**
+ * Handles the update-acceptance-criteria command.
+ * Updates the Microsoft.VSTS.Common.AcceptanceCriteria field of a work item.
+ * @param {string} cwd - Working directory
+ * @param {string[]} args - CLI args after the command name
+ */
+async function cmdUpdateAcceptanceCriteria(cwd, args) {
+  const idIdx = args.indexOf('--id');
+  const criteriaIdx = args.indexOf('--criteria');
+  const id = idIdx !== -1 ? args[idIdx + 1] : null;
+  const criteria = criteriaIdx !== -1 ? args[criteriaIdx + 1] : null;
+
+  const missing = [];
+  if (!id) missing.push('--id');
+  if (!criteria && criteria !== '') missing.push('--criteria');
+
+  if (missing.length > 0) {
+    console.error(`Missing required arguments: ${missing.join(', ')}`);
+    console.error('Usage: azdev-tools.cjs update-acceptance-criteria --id <workItemId> --criteria "<html>" [--cwd <path>]');
+    process.exit(1);
+  }
+
+  try {
+    const cfg = loadConfig(cwd);
+    const encodedPat = Buffer.from(':' + cfg.pat).toString('base64');
+
+    const patchUrl = `${cfg.org}/${cfg.project}/_apis/wit/workitems/${id}?api-version=7.1`;
+    const patchBody = [
+      {
+        op: 'replace',
+        path: '/fields/Microsoft.VSTS.Common.AcceptanceCriteria',
+        value: criteria,
+      },
+    ];
+
+    const res = await makePatchRequest(patchUrl, encodedPat, patchBody);
+
+    if (res.status === 200) {
+      console.log(JSON.stringify({ status: 'updated', id: Number(id) }));
+      process.exit(0);
+    } else {
+      const errorBody = res.body ? JSON.parse(res.body) : {};
+      throw new Error(`Failed to update acceptance criteria for work item ${id}: HTTP ${res.status} — ${errorBody.message || res.body}`);
     }
   } catch (err) {
     console.error(err.message);
@@ -1632,6 +1688,10 @@ async function main() {
     console.error('               Update the Description field of a work item');
     console.error('               stdout: JSON {status, id}');
     console.error('');
+    console.error('  update-acceptance-criteria --id <workItemId> --criteria "<html>"');
+    console.error('               Update the Acceptance Criteria field of a work item');
+    console.error('               stdout: JSON {status, id}');
+    console.error('');
     console.error('  update-state --id <workItemId> --state <state>');
     console.error('               Change the System.State field of a work item');
     console.error('               stdout: JSON {status, id, state}');
@@ -1701,6 +1761,10 @@ async function main() {
       await cmdUpdateDescription(cwd, cmdArgs);
       break;
 
+    case 'update-acceptance-criteria':
+      await cmdUpdateAcceptanceCriteria(cwd, cmdArgs);
+      break;
+
     case 'update-state':
       await cmdUpdateState(cwd, cmdArgs);
       break;
@@ -1735,7 +1799,7 @@ async function main() {
 
     default:
       console.error(`Unknown command: ${command}`);
-      console.error('Available commands: save-config, load-config, test, get-sprint, get-sprint-items, get-branch-links, update-description, update-state, get-child-states, create-branch, create-pr, show-sprint, list-repos, add-comment, delete-comment');
+      console.error('Available commands: save-config, load-config, test, get-sprint, get-sprint-items, get-branch-links, update-description, update-acceptance-criteria, update-state, get-child-states, create-branch, create-pr, show-sprint, list-repos, add-comment, delete-comment');
       process.exit(1);
   }
 }
