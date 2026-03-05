@@ -140,6 +140,7 @@ Launch an Agent with the full execution instructions for this single story (Step
 - All devsprint-tools.cjs CLI contracts needed (update-state, get-child-states, create-branch, create-pr)
 - The TDD workflow (RED → GREEN → REFACTOR)
 - Instruction to NEVER use AskUserQuestion (autonomous mode)
+- Instruction to verify the FULL test suite passes BEFORE writing any code (baseline check on base branch). If tests fail, skip the story.
 - Instruction to run the FULL test suite (`dotnet test` / `npm test` / `pytest`) after all implementation — not just new tests. All tests must pass before resolving tasks.
 - Instruction to return a JSON summary: `{"storyId": N, "status": "completed|partial|skipped", "branch": "...", "prUrl": "...", "tasksResolved": [...], "tasksRemaining": [...], "testsPassed": N, "testsFailed": N, "testCommand": "...", "testSuiteStatus": "all passed|failures|no test infrastructure", "error": "..."}`
 
@@ -171,6 +172,21 @@ Execute Steps 4a–4h below. In `all` mode (inside agent): if any step encounter
      - `all` mode: log error, record as "skipped — no story spec", continue to next story.
 
   2. Parse the story spec — it contains goal, acceptance criteria, technical context (key files, architecture), implementation notes, open questions, and tasks. This is your single source of truth for the implementation.
+
+  **Step 4b.1 — MANDATORY: Verify existing test suite passes BEFORE any code changes:**
+
+  Before creating a branch or writing any code, run the full test suite on the current base branch to confirm a green baseline. This catches pre-existing failures that must be fixed before new work begins.
+
+  1. Navigate to `{repoPath}`.
+  2. Detect test commands:
+     - If `*.sln` exists: run `dotnet test` from repo root.
+     - If `package.json` exists with a `test` script: run `npm test` or `npx vitest run`.
+     - If `pytest.ini` or `pyproject.toml` exists: run `pytest`.
+     - Run ALL that apply (e.g., both `dotnet test` AND `npx vitest run` for a fullstack repo).
+  3. If any tests fail:
+     - `single` mode: tell user "Existing tests fail on {baseBranch}. Fix these before proceeding." List the failing tests. Stop.
+     - `all` mode: log "Existing tests fail on {baseBranch} for story #{storyId} — skipping", record as "skipped — pre-existing test failures", continue to next story.
+  4. If all tests pass: display "Baseline tests green — proceeding." and continue.
 
   **Step 4c — Create feature branch:**
 
@@ -395,6 +411,7 @@ Next steps:
 - Each story gets a PR linked to the Azure DevOps story
 - In `all` mode: errors on one story do not block the next
 - In `single` mode: user is consulted on blockers
+- Existing test suite is verified green BEFORE any code changes (Step 4b.1)
 - Full test suite (`dotnet test` / `npm test`) runs after implementation — not just new tests
 - Test results (passed/failed counts) are included in the summary output
 - Tasks are NOT resolved if the full test suite has failures
