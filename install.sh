@@ -28,12 +28,16 @@ mkdir -p "$CLAUDE_DIR/bin"
 cp "$SCRIPT_DIR/bin/azdev-tools.cjs" "$CLAUDE_DIR/bin/"
 echo "Helper:   azdev-tools.cjs"
 
-# 3. Remove obsolete files
+# 3. Remove obsolete azdev commands (installed files not in repo)
 removed=()
-if [[ -f "$CLAUDE_DIR/commands/azdev.md" ]]; then
-  rm "$CLAUDE_DIR/commands/azdev.md"
-  removed+=("commands/azdev.md")
-fi
+for installed in "$CLAUDE_DIR"/commands/azdev*.md; do
+  [[ -f "$installed" ]] || continue
+  basename="$(basename "$installed")"
+  if [[ ! -f "$SCRIPT_DIR/commands/$basename" ]]; then
+    rm "$installed"
+    removed+=("$basename")
+  fi
+done
 if [[ ${#removed[@]} -gt 0 ]]; then
   echo "Removed:  ${removed[*]}"
 fi
