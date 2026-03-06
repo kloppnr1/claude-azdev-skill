@@ -20,10 +20,11 @@ $CWD is the project directory where .planning/ lives.
 
 devsprint-tools.cjs CLI contract used by this command:
 
-  node ~/.claude/bin/devsprint-tools.cjs show-sprint [--me] --cwd $CWD
+  node ~/.claude/bin/devsprint-tools.cjs show-sprint [--me] [--all] --cwd $CWD
     -> Fetches sprint metadata, fetches work items, renders colored board to stdout
     -> --me: filter to items assigned to the authenticated user
-    -> (no flag): shows all items in the sprint
+    -> --all: show ALL items including Resolved/Closed/Done (by default these are hidden)
+    -> Default (no --all): only shows stories that are NOT Resolved/Closed/Done
     -> stdout: ANSI-colored sprint board (stories grouped with tasks, colored state indicators)
     -> exit 0 on success
     -> exit 1 on error (stderr contains message — e.g., no config, no active sprint, auth failure)
@@ -36,11 +37,11 @@ devsprint-tools.cjs CLI contract used by this command:
 
 2. **Run the show-sprint command:**
 
-   **Default (no argument or anything other than `--all`):** Show only the user's own items:
+   **Default (no argument):** Show only the user's own incomplete items:
    Run: `node ~/.claude/bin/devsprint-tools.cjs show-sprint --me --cwd $CWD`
 
-   **If the user passed `--all`:** Show the entire sprint:
-   Run: `node ~/.claude/bin/devsprint-tools.cjs show-sprint --cwd $CWD`
+   **If the user passed `--all`:** Show ALL items including completed:
+   Run: `node ~/.claude/bin/devsprint-tools.cjs show-sprint --me --all --cwd $CWD`
 </process>
 
 <important>
@@ -51,5 +52,7 @@ Do NOT output any thinking, planning, or narration text. Just run the command an
 - Sprint board is displayed with a single command call
 - No intermediate steps, no JSON juggling, no dynamic script construction
 - No narration or thinking text — only the sprint board output
+- By default only incomplete stories are shown
+- --all flag shows everything including resolved/closed
 - Errors produce clear, actionable messages from the helper script
 </success_criteria>

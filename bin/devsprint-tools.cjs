@@ -1334,6 +1334,7 @@ async function cmdDeleteComment(cwd, args) {
  */
 async function cmdShowSprint(cwd, args) {
   const mine = args && args.includes('--me');
+  const showAll = args && args.includes('--all');
 
   try {
     const { cfg, encodedPat, teamName, iteration } = await getSprintData(cwd);
@@ -1415,6 +1416,29 @@ async function cmdShowSprint(cwd, args) {
       const myChildIds = new Set(items.filter(i => myItemIds.has(i.parentId)).map(i => i.id));
       const allMyIds = new Set([...myItemIds, ...myParentIds, ...myChildIds]);
       items = items.filter(i => allMyIds.has(i.id));
+    }
+
+    // Unless --all, filter out completed stories (Resolved/Closed/Done)
+    // Keep incomplete stories + their children, and orphan tasks that aren't done
+    if (!showAll) {
+      const doneStates = new Set(['Resolved', 'Closed', 'Done']);
+      // Find story IDs that are completed
+      const doneStoryIds = new Set(
+        items.filter(i => (i.type === 'User Story' || i.type === 'Feature') && doneStates.has(i.state)).map(i => i.id)
+      );
+      // Keep items where: story is not done, OR item is a child of a non-done story, OR item has no parent
+      items = items.filter(i => {
+        // If it's a story/feature: keep only if not done
+        if (i.type === 'User Story' || i.type === 'Feature') {
+          return !doneStates.has(i.state);
+        }
+        // If it's a child (task/bug): keep only if parent is not done
+        if (i.parentId) {
+          return !doneStoryIds.has(i.parentId);
+        }
+        // Orphan items: keep if not done
+        return !doneStates.has(i.state);
+      });
     }
 
     const lines = renderSprintBoard(sprint, items);
