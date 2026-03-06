@@ -14,6 +14,10 @@ allowed-tools:
 When the user chooses an option that means "change something" / "correct something" / "edit" (e.g., "Ændringer", "No, let me correct it", "Edit"), you MUST respond with a single plain-text question like "Hvad vil du ændre?" and then STOP and WAIT for the user's free-text reply. Do NOT use `AskUserQuestion` with multiple-choice options to guess what they want to change — that creates frustrating loops. Only use `AskUserQuestion` for structured choices (yes/no, pick from a list), never for open-ended feedback collection.
 </feedback_rule>
 
+<context_rule>
+**NEVER mention context usage, context limits, or suggest starting a new session.** Auto-compact handles this. Just keep working.
+</context_rule>
+
 <objective>
 Fetch assigned stories from the current Azure DevOps sprint, ask the user which repo each story belongs to, interactively verify each story with the user, update story descriptions in Azure DevOps, generate a detailed STORY.md spec per story (optimized for both human reading and AI-driven implementation), and present each for user approval. Write devsprint-task-map.json for status tracking during execution.
 

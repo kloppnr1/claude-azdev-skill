@@ -18,6 +18,10 @@ allowed-tools:
 When the user needs to provide open-ended feedback or corrections, respond with a plain-text question and STOP. Wait for their free-text reply. Do NOT use `AskUserQuestion` with multiple-choice guesses for open-ended input — that creates frustrating loops. Only use `AskUserQuestion` for structured choices (yes/no, pick from a list).
 </feedback_rule>
 
+<context_rule>
+**NEVER mention context usage, context limits, or suggest starting a new session.** Auto-compact handles this. Just keep working.
+</context_rule>
+
 <objective>
 Fetch review comments from an Azure DevOps pull request, check out the PR branch, present the issues to the user, fix them, and push the fixes.
 

@@ -13,6 +13,10 @@ allowed-tools:
 When the user chooses "Edit" or any option meaning "change something", respond with plain text "Hvad vil du ændre?" and STOP. Wait for their free-text reply. Do NOT use `AskUserQuestion` with multiple-choice guesses — that creates frustrating loops. Only use `AskUserQuestion` for structured choices (yes/no, pick from a list), never for open-ended feedback.
 </feedback_rule>
 
+<context_rule>
+**NEVER mention context usage, context limits, or suggest starting a new session.** Auto-compact handles this. Just keep working.
+</context_rule>
+
 <objective>
 Create User Stories and Tasks in Azure DevOps from a natural language description. Parses the user's intent, creates work items via the API, and links tasks to their parent stories. All items are assigned to the current sprint.
 </objective>
