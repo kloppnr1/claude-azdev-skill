@@ -109,12 +109,14 @@
   .ab-srow .id { color: var(--indigo); font-family: var(--mono); font-size: 10px; min-width: 50px; }
   .ab-srow .name { color: var(--text2); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
   .ab-srow .ab-sstep { font-family: var(--mono); font-size: 8px; font-weight: 600; padding: 1px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.3px; }
-  .ab-sstep.st-load { background: rgba(107,114,128,0.12); color: #6b7280; }
-  .ab-sstep.st-analyze { background: rgba(6,182,212,0.12); color: #0891b2; }
-  .ab-sstep.st-spec { background: rgba(245,158,11,0.12); color: #d97706; }
-  .ab-sstep.st-devops { background: rgba(59,130,246,0.12); color: #2563eb; }
-  .ab-sstep.st-done { background: rgba(34,197,94,0.12); color: #16a34a; }
-  .ab-sstep.st-error { background: rgba(239,68,68,0.12); color: #dc2626; }
+  .st-load { background: rgba(107,114,128,0.12); color: #6b7280; }
+  .st-analyze { background: rgba(6,182,212,0.12); color: #0891b2; }
+  .st-spec { background: rgba(245,158,11,0.12); color: #d97706; }
+  .st-devops { background: rgba(59,130,246,0.12); color: #2563eb; }
+  .st-done { background: rgba(34,197,94,0.12); color: #16a34a; }
+  .st-test { background: rgba(249,115,22,0.12); color: #ea580c; }
+  .st-work { background: rgba(139,92,246,0.12); color: #7c3aed; }
+  .st-error { background: rgba(239,68,68,0.12); color: #dc2626; }
   .ab-srow .ab-sdesc { color: var(--dim); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
   @keyframes liveBg { 0%,100%{ background: rgba(67,56,202,0.14); } 50%{ background: rgba(67,56,202,0.04); } }
   .story-row.story-live > * { animation: liveBg 2s ease-in-out infinite; }
@@ -600,10 +602,12 @@ function stepColor(s) {
   if (!s) return 'st-load';
   var l = s.toLowerCase();
   if (/error|fail/i.test(l)) return 'st-error';
-  if (/done|complete|finish|await|review|present/i.test(l)) return 'st-done';
-  if (/devops|post|comment|task.?map|updat.*desc/i.test(l)) return 'st-devops';
-  if (/spec|generat|verif.*understand|story\.md/i.test(l)) return 'st-spec';
-  if (/analy|scan/i.test(l)) return 'st-analyze';
+  if (/done|complete|finish|resolv.*task|merged/i.test(l)) return 'st-done';
+  if (/test|baseline/i.test(l)) return 'st-test';
+  if (/implement|writ(?!.*test)|commit|branch|push|code|refactor/i.test(l)) return 'st-work';
+  if (/devops|post|comment|task.?map|updat.*desc|pr$|pull.?req|creat.*pr/i.test(l)) return 'st-devops';
+  if (/spec|generat|verif.*understand|story\.md|review|present|await/i.test(l)) return 'st-spec';
+  if (/analy|scan|pre.?flight|activat/i.test(l)) return 'st-analyze';
   return 'st-load';
 }
 
