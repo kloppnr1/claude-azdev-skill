@@ -98,23 +98,26 @@
   .ab-detail { padding: 0 16px 10px 34px; display: flex; align-items: center; gap: 8px; }
   .ab-step {
     font-family: var(--mono); font-size: 9px; font-weight: 600;
-    padding: 2px 8px; border-radius: 4px; background: rgba(67,56,202,0.1);
-    color: var(--indigo); text-transform: uppercase; letter-spacing: 0.3px;
+    padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.3px;
   }
   .ab-desc { font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-  .ab-progress { display: flex; gap: 2px; padding: 0 16px 12px 34px; }
-  .ab-bar { height: 3px; flex: 1; border-radius: 2px; background: var(--border); }
-  .ab-bar.done { background: var(--indigo); opacity: 0.5; }
-  .ab-bar.now { background: var(--indigo); box-shadow: 0 0 6px rgba(67,56,202,0.5); animation: livePulse 2s ease-in-out infinite; }
-  .ab-bar-multi { height: 3px; border-radius: 2px; background: var(--border); margin: 0 1px; }
+  .ab-progress { padding: 0 16px 12px 34px; height: 3px; border-radius: 2px; background: var(--border); overflow: hidden; position: relative; }
+  .ab-progress .ab-ind { position: absolute; top: 0; left: 0; height: 100%; width: 30%; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--indigo), transparent); animation: abSlide 1.8s ease-in-out infinite; }
+  @keyframes abSlide { 0% { left: -30%; } 100% { left: 100%; } }
   .ab-stories { padding: 0 16px 8px 34px; display: flex; flex-direction: column; gap: 3px; }
   .ab-srow { display: flex; align-items: center; gap: 8px; font-size: 11px; }
   .ab-srow .id { color: var(--indigo); font-family: var(--mono); font-size: 10px; min-width: 50px; }
   .ab-srow .name { color: var(--text2); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
-  .ab-srow .ab-sstep { font-family: var(--mono); font-size: 8px; font-weight: 600; padding: 1px 6px; border-radius: 3px; background: rgba(67,56,202,0.1); color: var(--indigo); text-transform: uppercase; letter-spacing: 0.3px; }
+  .ab-srow .ab-sstep { font-family: var(--mono); font-size: 8px; font-weight: 600; padding: 1px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.3px; }
+  .ab-sstep.st-load { background: rgba(107,114,128,0.12); color: #6b7280; }
+  .ab-sstep.st-analyze { background: rgba(6,182,212,0.12); color: #0891b2; }
+  .ab-sstep.st-spec { background: rgba(245,158,11,0.12); color: #d97706; }
+  .ab-sstep.st-devops { background: rgba(59,130,246,0.12); color: #2563eb; }
+  .ab-sstep.st-done { background: rgba(34,197,94,0.12); color: #16a34a; }
+  .ab-sstep.st-error { background: rgba(239,68,68,0.12); color: #dc2626; }
   .ab-srow .ab-sdesc { color: var(--dim); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-  @keyframes liveBg { 0%,100%{ background: var(--indigo-light); } 50%{ background: rgba(67,56,202,0.03); } }
-  .story-row.story-live > * { animation: liveBg 3s ease-in-out infinite; }
+  @keyframes liveBg { 0%,100%{ background: rgba(67,56,202,0.14); } 50%{ background: rgba(67,56,202,0.04); } }
+  .story-row.story-live > * { animation: liveBg 2s ease-in-out infinite; }
   .story-row.story-live > :first-child { box-shadow: inset 3px 0 0 var(--indigo); }
 
   /* ── Stats ── */
@@ -593,6 +596,17 @@ const isPlanStep = s => { if(!s)return false; const l=s.toLowerCase(); return /p
 const stepI = s => isPlanStep(s) ? planI(s) : execI(s);
 const getSteps = s => isPlanStep(s) ? PLAN_STEPS : EXEC_STEPS;
 
+function stepColor(s) {
+  if (!s) return 'st-load';
+  var l = s.toLowerCase();
+  if (/error|fail/i.test(l)) return 'st-error';
+  if (/done|complete|finish|await|review|present/i.test(l)) return 'st-done';
+  if (/devops|post|comment|task.?map|updat.*desc/i.test(l)) return 'st-devops';
+  if (/spec|generat|verif.*understand|story\.md/i.test(l)) return 'st-spec';
+  if (/analy|scan/i.test(l)) return 'st-analyze';
+  return 'st-load';
+}
+
 function renderAgent(d) {
   const banner = document.getElementById('agent-banner');
   const pulse = document.getElementById('ab-pulse');
@@ -644,6 +658,7 @@ function renderAgent(d) {
   time.textContent = a.startedAt ? AGO(a.startedAt) : '';
   extra.style.display = '';
   step.textContent = a.step || '';
+  step.className = 'ab-step ' + stepColor(a.step);
   desc.textContent = a.storyId ? (a.detail || '') : (a.detail && a.detail !== story.textContent ? a.detail : (a.repo || ''));
 
   // Per-story rows
@@ -661,7 +676,7 @@ function renderAgent(d) {
       const row = cel('div', 'ab-srow');
       row.appendChild(cel('span', 'id', '#' + ss.storyId));
       row.appendChild(cel('span', 'name', ss.storyTitle || ''));
-      row.appendChild(cel('span', 'ab-sstep', ss.step || ''));
+      row.appendChild(cel('span', 'ab-sstep ' + stepColor(ss.step), ss.step || ''));
       row.appendChild(cel('span', 'ab-sdesc', ss.detail || ''));
       storiesEl.appendChild(row);
     });
@@ -671,13 +686,7 @@ function renderAgent(d) {
     storiesEl.innerHTML = '';
   }
 
-  if (storyKeys.length > 1) {
-    prog.innerHTML = '';
-  } else {
-    const steps = getSteps(a.step);
-    const ci = stepI(a.step);
-    prog.innerHTML = steps.map((_, i) => `<div class="ab-bar ${i < ci ? 'done' : i === ci ? 'now' : ''}"></div>`).join('');
-  }
+  prog.innerHTML = '<div class="ab-ind"></div>';
 }
 
 /* ── DOM State ── */
