@@ -413,7 +413,7 @@ async function handleRequest(req, res) {
             delete planEnv.CLAUDECODE;
             const planBat = path.join(CWD, '.planning', '_run_plan.bat');
             fs.writeFileSync(planBat, `@echo off\nset "CLAUDECODE="\ncd /d "${CWD}"\nclaude -p "/devsprint-plan ${planId} --headless --reanalyze" --dangerously-skip-permissions --verbose\n`);
-            planExec(`start cmd /k "${planBat}"`, { shell: true });
+            planExec(`start cmd /c "${planBat}"`, { shell: true });
             data = { status: 'launched', storyId: planId };
           } else {
             res.writeHead(405); res.end(JSON.stringify({ error: 'POST only' })); return;
