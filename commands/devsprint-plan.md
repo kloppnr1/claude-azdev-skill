@@ -122,6 +122,22 @@ Filter to top-level stories only:
 - If `targetStoryId` is not found in the sprint items, tell the user: "Story #{targetStoryId} not found in your current sprint items." Stop.
 - After filtering, continue with only this one story — skip Step 5 (multi-story summary) and go directly to Step 4.
 
+**Step 3.5 — Check for existing analysis:**
+
+For each story to process, check if it has already been analyzed in a previous session:
+
+1. Check if `$CWD/.planning/devsprint-task-map.json` exists and contains a mapping for this story's ID with a non-null `repoPath`.
+2. If found, check if `{repoPath}/.planning/stories/{storyId}.md` exists.
+3. If BOTH exist (task map entry + spec file): the story has been previously analyzed.
+
+For previously analyzed stories, ask the user:
+- Question: "#{id} ({title}) er allerede analyseret. Ny analyse?"
+- Options: "Nej, behold eksisterende" / "Ja, analyser forfra"
+- If "Nej": **skip this story entirely** — no repo analysis, no spec generation, no DevOps update. Mark as "kept existing" in the final summary.
+- If "Ja": proceed normally through Steps 4–11 (full re-analysis).
+
+For stories WITHOUT an existing analysis: proceed normally (no question asked).
+
 **Story mode detection:**
 
 For each story, check its `tags` array (case-insensitive). If tags include `"research"`, mark the story as `researchMode = true`. This affects Steps 4.5, 5.5, and 8:
@@ -336,14 +352,6 @@ node ~/.claude/bin/devsprint-tools.cjs update-acceptance-criteria --id {storyId}
 ```
 
 If update fails, warn but continue (non-blocking).
-
-**Step 7 — Check for existing .planning/ in target repo:**
-
-For each repo that will be processed:
-- Check if `{repoPath}/.planning/stories/{storyId}.md` exists via Bash `test -f`.
-- If it exists, use `AskUserQuestion`:
-  "Story #{storyId} already has a spec at {repoPath}/.planning/stories/{storyId}.md. Overwrite it? (yes/no)"
-  If the user says "no", skip this story. Default to no if unclear.
 
 **Step 8 — Generate STORY.md for each story:**
 
@@ -567,6 +575,9 @@ After processing all repos, display:
 
 Stories planned:
   #{storyId} {storyTitle} → {repoPath}/.planning/stories/{storyId}.md (approved)
+
+Kept existing:
+  #{storyId} {storyTitle} (already analyzed — kept existing spec)
 
 Skipped:
   #{storyId} {storyTitle}: user skipped
