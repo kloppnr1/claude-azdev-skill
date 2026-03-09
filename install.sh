@@ -23,10 +23,11 @@ for f in "$SCRIPT_DIR"/commands/devsprint*.md; do
 done
 echo "Commands: ${copied_commands[*]}"
 
-# 2. Helper script
+# 2. Helper scripts
 mkdir -p "$CLAUDE_DIR/bin"
 cp "$SCRIPT_DIR/bin/devsprint-tools.cjs" "$CLAUDE_DIR/bin/"
-echo "Helper:   devsprint-tools.cjs"
+cp "$SCRIPT_DIR/bin/devsprint-screenshot.cjs" "$CLAUDE_DIR/bin/"
+echo "Helper:   devsprint-tools.cjs, devsprint-screenshot.cjs"
 
 # 3. Remove obsolete commands (old azdev-* and devsprint-* files not in repo)
 removed=()

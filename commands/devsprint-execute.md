@@ -64,6 +64,11 @@ devsprint-tools.cjs CLI contracts used by this command:
     -> stdout: JSON {"pr":"<url>","prId":N,"branch":"...","base":"...","pushed":true,"linked":true|false}
     -> exit 0 on success, exit 1 on error
 
+  node ~/.claude/bin/devsprint-screenshot.cjs --url <url> --output <path> [--width 1280] [--height 900] [--wait 2000] [--full-page]
+    -> Takes a browser screenshot using Puppeteer (auto-installs if needed)
+    -> stdout: JSON {"status":"ok","output":"<absolute-path>","url":"...","viewport":{...}}
+    -> exit 0 on success, exit 1 on error
+
 devsprint-execution-log.json structure (written by /devsprint-execute after each story):
   {
     "executions": [
@@ -257,7 +262,7 @@ Launch an Agent with the full execution instructions for this single story (Step
 - The TDD workflow (RED → GREEN → REFACTOR)
 - Instruction to verify the FULL test suite passes BEFORE writing any code (baseline check on base branch). If tests fail, skip the story.
 - Instruction to run the FULL test suite (`dotnet test` / `npm test` / `pytest`) after all implementation — not just new tests. All tests must pass before resolving tasks.
-- Instruction to return a JSON summary: `{"storyId": N, "status": "completed|partial|skipped", "branch": "...", "prUrl": "...", "tasksResolved": [...], "tasksRemaining": [...], "testsPassed": N, "testsFailed": N, "testCommand": "...", "testSuiteStatus": "all passed|failures|no test infrastructure", "error": "..."}`
+- Instruction to return a JSON summary: `{"storyId": N, "status": "completed|partial|skipped", "branch": "...", "prUrl": "...", "tasksResolved": [...], "tasksRemaining": [...], "testsPassed": N, "testsFailed": N, "testCommand": "...", "testSuiteStatus": "all passed|failures|no test infrastructure", "uiVerified": true|false, "screenshotPath": ".planning/screenshots/{storyId}.png"|null, "error": "..."}`
 - **Dashboard status reporting** — the agent MUST report its progress to the dashboard at each major step by running:
   `node ~/.claude/bin/devsprint-tools.cjs report-status --story-id {storyId} --story-title "{storyTitle}" --step "<step>" --detail "<detail>" --repo "{repoName}" --cwd $CWD`
   Report status at these points:
@@ -269,6 +274,7 @@ Launch an Agent with the full execution instructions for this single story (Step
   - Step 4e (RED): `--step "Writing tests (RED)" --detail "Writing failing tests for {taskTitle}"`
   - Step 4e (GREEN): `--step "Implementing (GREEN)" --detail "Making tests pass for {taskTitle}"`
   - Step 4e (full suite): `--step "Running full test suite" --detail "{testCommand}" --command "{testCommand}"`
+  - Step 4e.5: `--step "UI verification" --detail "Checking visual output for frontend changes"`
   - Step 4f: `--step "Resolving tasks" --detail "Resolving {N} tasks in Azure DevOps"`
   - Step 4g: `--step "Creating PR" --detail "Pushing and creating pull request"`
   - Step 4h: `--step "Complete" --detail "Story #{storyId} finished"`
@@ -409,6 +415,54 @@ Execute Steps 4a–4h below. In `all` mode or `--headless`: if any step encounte
 
   IMPORTANT: Do NOT spend time exploring or understanding the codebase broadly. The `/devsprint-plan` command already did that analysis and wrote the story spec. Trust the spec. Only read files that you are about to modify.
 
+  **Step 4e.5 — UI verification (if frontend changes detected):**
+
+  After implementation is complete and all tests pass, check if any frontend/UI files were modified in this branch:
+
+  1. Run `git diff --name-only {baseBranch}...HEAD` in `{repoPath}` and check for UI-related file changes:
+     - `.html`, `.htm`, `.css`, `.scss`, `.less`
+     - `.tsx`, `.jsx`, `.vue`, `.svelte`
+     - `.razor`, `.cshtml`
+     - Files in directories named `components/`, `views/`, `pages/`, `wwwroot/`, `public/`, `ClientApp/`
+
+  2. If NO UI files changed: skip this step entirely.
+
+  3. If UI files changed, attempt visual verification:
+
+     **a. Detect and start the application:**
+     - Check `package.json` for `start` or `dev` scripts → run `npm start` or `npm run dev` in the background
+     - Check for `.csproj` with web SDK → run `dotnet run` in the background
+     - Check for existing dev server URL in story spec or project config
+     - If no dev server can be started: skip visual verification, log "UI changes detected but no dev server available for visual check"
+     - Wait up to 10 seconds for the server to become available (check with `curl -s -o /dev/null -w "%{http_code}" http://localhost:<port>`)
+
+     **b. Take screenshot:**
+     Run: `node ~/.claude/bin/devsprint-screenshot.cjs --url http://localhost:<port>/<relevant-path> --output {repoPath}/.planning/screenshots/{storyId}.png --full-page`
+
+     If the story spec mentions a specific page or route to verify, use that URL. Otherwise use the root URL.
+
+     **c. Analyze the screenshot:**
+     Use the Read tool to view the screenshot image. As a multimodal AI, you can see the rendered UI. Check for:
+     - Layout issues: misaligned elements, overlapping content, broken grids
+     - Missing content: blank areas where content should be, missing text or icons
+     - Styling problems: wrong colors, broken borders, invisible text on same-color background
+     - Responsive issues: content overflowing its container, cut off text
+     - General visual quality: does it look polished and intentional?
+
+     **d. Fix and re-verify:**
+     If visual issues are found:
+     - Fix the CSS/HTML/component code
+     - Run tests again to ensure nothing broke
+     - Take a new screenshot and verify the fix
+     - Repeat up to 3 times maximum
+
+     **e. Clean up:**
+     - Stop any dev server you started (kill the background process)
+     - Keep the final screenshot at `{repoPath}/.planning/screenshots/{storyId}.png` — it serves as visual documentation
+     - Commit the screenshot: `docs: add UI verification screenshot for #{storyId}`
+
+     Report status: `--step "UI verification" --detail "Checking visual output for frontend changes"`
+
   **Step 4f — Auto-resolve activated tasks:**
 
   For each task ID in `activatedTaskIds`:
@@ -449,11 +503,21 @@ Execute Steps 4a–4h below. In `all` mode or `--headless`: if any step encounte
   - #{taskId} — {taskTitle}
   - #{taskId} — {taskTitle}
 
+  {If UI screenshot exists at .planning/screenshots/{storyId}.png:}
+  ## UI Verification
+  Screenshot taken after implementation — visual check passed.
+
+  ![UI Screenshot](.planning/screenshots/{storyId}.png)
+  {end if}
+
   ## Test plan
   - [ ] Verify acceptance criteria from story
-  - [ ] Run automated tests
+  - [x] Automated tests passed ({testsPassed} tests)
+  - [x] UI visually verified via screenshot
   - [ ] Code review
   ```
+
+  **Note on screenshot in PR:** The screenshot is committed to the branch at `.planning/screenshots/{storyId}.png`. Azure DevOps renders images from the repo in PR descriptions using relative paths. If the image doesn't render inline, the reviewer can still find it in the branch's `.planning/screenshots/` folder.
 
   Run: `node ~/.claude/bin/devsprint-tools.cjs create-pr --repo {repoPath} --branch {branchName} --base {baseBranch} --title "#{storyId} {storyTitle}" --body "{prBody}" --story-id {storyId} --cwd $CWD`
 
@@ -596,4 +660,7 @@ Next steps:
 - Test results (passed/failed counts) are included in the summary output
 - Tasks are NOT resolved if the full test suite has failures
 - Clear summary with PR links and test results at the end
+- UI changes trigger automatic visual verification via screenshot
+- Screenshots are saved as documentation in `.planning/screenshots/`
+- Visual issues are self-corrected (up to 3 attempts) before proceeding
 </success_criteria>

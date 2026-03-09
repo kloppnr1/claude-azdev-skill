@@ -106,8 +106,8 @@
   .ab-srow .name { color: var(--text2); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
   .ab-srow .ab-sstep { font-family: var(--mono); font-size: 8px; font-weight: 600; padding: 1px 6px; border-radius: 3px; background: rgba(67,56,202,0.1); color: var(--indigo); text-transform: uppercase; letter-spacing: 0.3px; }
   .ab-srow .ab-sdesc { color: var(--dim); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-  @keyframes storyPulse { 0%,100%{box-shadow:inset 2px 0 0 var(--indigo)} 50%{box-shadow:inset 2px 0 0 rgba(67,56,202,0.3)} }
-  .story-row.story-live { animation: storyPulse 2s ease-in-out infinite; background: var(--indigo-light); }
+  @keyframes storyPulse { 0%,100%{box-shadow:inset 0 0 0 0 transparent} 50%{box-shadow:inset 0 0 8px rgba(67,56,202,0.08)} }
+  .story-row.story-live > * { background: var(--indigo-light); animation: storyPulse 2s ease-in-out infinite; }
 
   /* ── Stats ── */
   .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px; }
@@ -143,21 +143,31 @@
   .badge-branch { background: var(--purple-light); color: var(--purple); }
   .badge-dirty { background: var(--amber-light); color: var(--amber); }
 
-  /* ── Story Row ── */
-  .story-row {
-    padding: 8px 16px; position: relative;
-    display: grid; grid-template-columns: 48px 1fr 80px 120px 60px;
-    align-items: center; gap: 8px;
-    border-bottom: 1px solid var(--border-light);
-    cursor: pointer; transition: background 0.1s;
+  /* ── Story Grid (parent holds column defs, rows use display:contents) ── */
+  .story-grid {
+    display: grid;
+    grid-template-columns: 48px 1fr 90px 100px 60px;
+    align-items: center;
   }
-  .story-row:last-child { border-bottom: none; }
-  .story-row:hover { background: #faf9f7; }
+  .story-row {
+    display: contents;
+    cursor: pointer;
+  }
+  .story-row > * {
+    padding: 9px 0; border-bottom: 1px solid var(--border-light);
+  }
+  .story-row > :first-child { padding-left: 16px; }
+  .story-row > :last-child { padding-right: 16px; }
+  .story-row:hover > * { background: #faf9f7; }
   .story-row .btn-exec {
-    position: absolute; right: 70px; top: 50%; transform: translateY(-50%);
-    opacity: 0; transition: opacity 0.15s;
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    opacity: 0; transition: opacity 0.15s; z-index: 2;
   }
   .story-row:hover .btn-exec { opacity: 1; }
+  /* Title cell needs position:relative for the exec button */
+  .s-title-cell {
+    position: relative; display: flex; align-items: center; min-width: 0;
+  }
   .s-id {
     font-family: var(--mono); font-size: 10px; color: var(--mute);
   }
@@ -165,12 +175,12 @@
     font-size: 12.5px; font-weight: 500; color: var(--text2);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  /* Inline indicators — visible without expanding */
+  /* Inline indicators */
   .s-indicators { display: flex; align-items: center; gap: 4px; justify-content: flex-end; }
   .ind {
     font-family: var(--mono); font-size: 8px; font-weight: 600;
     padding: 1px 6px; border-radius: 3px; letter-spacing: 0.2px;
-    text-transform: uppercase;
+    text-transform: uppercase; white-space: nowrap;
   }
   .ind-live { background: var(--indigo-light); color: var(--indigo); }
   .ind-planned { background: var(--purple-light); color: var(--purple); }
@@ -181,7 +191,10 @@
   .ind-partial { background: var(--amber-light); color: var(--amber); }
   .s-state {
     font-family: var(--mono); font-size: 9px; font-weight: 600;
-    padding: 2px 8px; border-radius: 4px; white-space: nowrap;
+    white-space: nowrap; text-align: right;
+  }
+  .s-state-tag {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
   }
   .st-new { background: var(--cyan-light); color: var(--cyan); }
   .st-active { background: var(--blue-light); color: var(--blue); }
@@ -191,7 +204,8 @@
 
   /* ── Story Detail (expanded) ── */
   .story-detail {
-    padding: 8px 16px 10px 56px; background: #faf9f7;
+    grid-column: 1 / -1;
+    padding: 8px 16px 10px 64px; background: #faf9f7;
     border-bottom: 1px solid var(--border-light);
   }
   .detail-sec { margin-bottom: 6px; }
@@ -271,9 +285,11 @@
   /* ── Repo badge on story row ── */
   .s-repo {
     font-family: var(--mono); font-size: 8px; font-weight: 600;
-    padding: 1px 6px; border-radius: 3px; letter-spacing: 0.2px;
-    background: #f0ede8; color: var(--dim); white-space: nowrap;
-    text-align: center;
+    letter-spacing: 0.2px; white-space: nowrap;
+  }
+  .s-repo-tag {
+    display: inline-block; padding: 2px 8px; border-radius: 3px;
+    background: #f0ede8; color: var(--dim);
   }
   .btn-exec {
     font-family: var(--sans); font-size: 11px; font-weight: 600;
@@ -720,21 +736,13 @@ function buildStoryRow(s, ctx) {
 
   const row = cel('div', 'story-row');
   row.dataset.storyId = s.id;
-  if (hasDetail) row.onclick = function() { togDetail(this); };
 
+  // Col 1: ID
   row.appendChild(cel('span', 's-id', '#' + s.id));
-  row.appendChild(cel('span', 's-title', s.title));
 
-  const inds = cel('span', 's-indicators');
-  inds.dataset.storyIndicators = s.id;
-  fillIndicators(inds, s, ctx);
-  row.appendChild(inds);
-
-  // Repo badge (strip common prefix)
-  const repoName = sRM ? sRM[s.id] : null;
-  if (repoName) row.appendChild(cel('span', 's-repo', repoName.replace(/^NewSettlement\./, '')));
-
-  // "Udfør plan" button for planned/partial stories
+  // Col 2: Title + exec button in a cell wrapper
+  const titleCell = cel('div', 's-title-cell');
+  titleCell.appendChild(cel('span', 's-title', s.title));
   const cls = classifyStory(s, ctx);
   if (cls === 'planned' || cls === 'partial') {
     const btn = cel('button', 'btn-exec', 'Udf\u00f8r plan');
@@ -742,13 +750,40 @@ function buildStoryRow(s, ctx) {
       e.stopPropagation();
       openSpecPanel(s.id, s.title);
     };
-    row.appendChild(btn);
+    titleCell.appendChild(btn);
   }
+  row.appendChild(titleCell);
 
+  // Col 3: Indicators
+  const inds = cel('span', 's-indicators');
+  inds.dataset.storyIndicators = s.id;
+  fillIndicators(inds, s, ctx);
+  row.appendChild(inds);
+
+  // Col 4: Repo badge
+  const repoName = sRM ? sRM[s.id] : null;
+  const repoEl = cel('span', 's-repo');
+  if (repoName) {
+    const tag = cel('span', 's-repo-tag', repoName.replace(/^NewSettlement\./, ''));
+    repoEl.appendChild(tag);
+  }
+  row.appendChild(repoEl);
+
+  // Col 5: State badge
   const sc = SC(s.state);
   const stCls = s.state.toLowerCase() === 'closed' ? 'st-closed' : 'st-' + sc;
-  const stateEl = cel('span', 's-state ' + stCls, s.state);
+  const stateEl = cel('span', 's-state');
+  const stateTag = cel('span', 's-state-tag ' + stCls, s.state);
+  stateEl.appendChild(stateTag);
   row.appendChild(stateEl);
+
+  // Click handler for expanding details
+  if (hasDetail) {
+    row.onclick = function() {
+      const d = document.querySelector('[data-story-detail="' + s.id + '"]');
+      if (d) d.style.display = d.style.display === 'none' ? 'block' : 'none';
+    };
+  }
 
   // Detail panel
   const detail = cel('div', 'story-detail');
@@ -859,13 +894,9 @@ function buildStoryRow(s, ctx) {
 function updateStoryDom(sd, s, ctx) {
   const sc = SC(s.state);
   const stCls = s.state.toLowerCase() === 'closed' ? 'st-closed' : 'st-' + sc;
-  sd.stateEl.className = 's-state ' + stCls;
-  sd.stateEl.textContent = s.state;
+  const tag = sd.stateEl.querySelector('.s-state-tag');
+  if (tag) { tag.className = 's-state-tag ' + stCls; tag.textContent = s.state; }
   fillIndicators(sd.inds, s, ctx);
-  const { exM, prM, ag } = ctx;
-  if ((exM[s.id] || prM[s.id] || (ag && ag.active && ag.active.storyId === s.id)) && !sd.row.onclick) {
-    sd.row.onclick = function() { togDetail(this); };
-  }
 }
 
 /* ── Build commits section (DOM, no innerHTML) ── */
@@ -980,39 +1011,40 @@ function buildMainDOM(mainEl, statusGroups, ctx) {
     header.appendChild(cel('span', 'status-count', String(stories.length)));
     card.appendChild(header);
 
-    const body = cel('div', 'repo-body');
-
     if (key === 'done') {
       // Completed stories — collapsed by default
-      const compId = 'done-all';
       const toggle = cel('div', 'commits-toggle');
       const arrow = cel('span', 'ct-arrow', '\u25B6');
       const label = cel('span', 'ct-label', stories.length + ' afsluttede stories');
       label.style.color = 'var(--green)';
       toggle.appendChild(arrow); toggle.appendChild(label);
       const section = cel('div', 'commits-section');
-      section.id = compId; section.style.display = 'none';
+      section.id = 'done-all'; section.style.display = 'none';
+      const doneGrid = cel('div', 'story-grid');
+      doneGrid.style.opacity = '0.55';
+      for (const s of stories) {
+        const sd = buildStoryRow(s, ctx);
+        doneGrid.appendChild(sd.row); doneGrid.appendChild(sd.detail);
+        _dom.storyDoms.set(s.id, sd);
+      }
+      section.appendChild(doneGrid);
       toggle.onclick = function() {
         const show = section.style.display === 'none';
         section.style.display = show ? '' : 'none';
         arrow.textContent = show ? '\u25BC' : '\u25B6';
       };
-      for (const s of stories) {
-        const sd = buildStoryRow(s, ctx);
-        sd.row.style.opacity = '0.55';
-        section.appendChild(sd.row); section.appendChild(sd.detail);
-        _dom.storyDoms.set(s.id, sd);
-      }
-      body.appendChild(toggle); body.appendChild(section);
+      card.appendChild(toggle);
+      card.appendChild(section);
     } else {
+      const grid = cel('div', 'story-grid');
       for (const s of stories) {
         const sd = buildStoryRow(s, ctx);
-        body.appendChild(sd.row); body.appendChild(sd.detail);
+        grid.appendChild(sd.row); grid.appendChild(sd.detail);
         _dom.storyDoms.set(s.id, sd);
       }
+      card.appendChild(grid);
     }
 
-    card.appendChild(body);
     mainEl.appendChild(card);
   }
 }
