@@ -45,7 +45,8 @@ devsprint-tools.cjs CLI contract used by this command:
 </process>
 
 <important>
-Do NOT output any thinking, planning, or narration text. Just run the command and let the output speak for itself. No "Let me fetch...", "Now I'll render...", or similar messages.
+- Do NOT output any thinking, planning, or narration text. No "Let me fetch...", "Now I'll render...", or similar messages.
+- After running the command, **always copy the full output into your text response** so the user sees it directly without expanding the tool result. The Bash tool output is often truncated or collapsed — the user must see the full sprint board without clicking anything.
 </important>
 
 <success_criteria>
