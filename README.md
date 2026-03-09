@@ -18,7 +18,7 @@ Zero external dependencies. Just Node.js built-ins and the Azure DevOps REST API
 
 ## What it looks like
 
-End-to-end example: create a story, plan it, and execute — three commands.
+End-to-end example: **`/devsprint-create`** → **`/devsprint-plan`** → **`/devsprint-execute`** → review PR → **`/devsprint-pr-fix`**.
 
 ```
 > /devsprint-create Add dark mode toggle: 1) Backend user preference 2) Frontend toggle 3) Tests
@@ -116,7 +116,7 @@ Will execute:
      PR: https://dev.azure.com/.../pullrequest/187
 ```
 
-Review the PR in Azure DevOps. Leave comments on anything that needs fixing, then:
+Review the PR in Azure DevOps. Leave comments on anything that needs fixing, then run **`/devsprint-pr-fix`**:
 
 ```
 > /devsprint-pr-fix 3040
@@ -145,7 +145,7 @@ PR: https://dev.azure.com/.../pullrequest/187
 
 ### Batch mode — plan and execute an entire sprint
 
-Skip the story ID and it processes everything autonomously. Walk away and come back to PRs.
+Run **`/devsprint-plan`** and **`/devsprint-execute`** without a story ID and they process everything autonomously. Walk away and come back to PRs.
 
 ```
 > /devsprint-plan
@@ -239,7 +239,7 @@ All pull requests:
   https://dev.azure.com/.../pullrequest/189
 ```
 
-Review the PRs in Azure DevOps, leave comments, then fix them one by one:
+Review the PRs in Azure DevOps, leave comments, then run **`/devsprint-pr-fix`** for each:
 
 ```
 > /devsprint-pr-fix 3044
