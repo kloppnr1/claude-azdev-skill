@@ -2,3 +2,6 @@
 .planning/azdev-config.json
 .planning/azdo-config.json
 .planning/
+
+# Dev-only
+CLAUDE.md
