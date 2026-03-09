@@ -2094,16 +2094,9 @@ async function cmdCreateWorkItem(cwd, args) {
       }
     }
 
-    // Link to parent work item
+    // Set parent work item via System.Parent field (not relations — relations don't persist reliably)
     if (parentId) {
-      patchBody.push({
-        op: 'add',
-        path: '/relations/-',
-        value: {
-          rel: 'System.LinkTypes.Hierarchy-Reverse',
-          url: `${cfg.org}/${cfg.project}/_apis/wit/workitems/${parentId}`,
-        },
-      });
+      patchBody.push({ op: 'add', path: '/fields/System.Parent', value: Number(parentId) });
     }
 
     // Create work item via POST with json-patch+json
