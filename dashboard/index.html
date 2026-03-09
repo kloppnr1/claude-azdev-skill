@@ -106,13 +106,15 @@
   .ab-bar { height: 3px; flex: 1; border-radius: 2px; background: var(--border); }
   .ab-bar.done { background: var(--indigo); opacity: 0.5; }
   .ab-bar.now { background: var(--indigo); box-shadow: 0 0 6px rgba(67,56,202,0.5); animation: livePulse 2s ease-in-out infinite; }
+  .ab-bar-multi { height: 3px; border-radius: 2px; background: var(--border); margin: 0 1px; }
   .ab-stories { padding: 0 16px 8px 34px; display: flex; flex-direction: column; gap: 3px; }
   .ab-srow { display: flex; align-items: center; gap: 8px; font-size: 11px; }
   .ab-srow .id { color: var(--indigo); font-family: var(--mono); font-size: 10px; min-width: 50px; }
   .ab-srow .name { color: var(--text2); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
   .ab-srow .ab-sstep { font-family: var(--mono); font-size: 8px; font-weight: 600; padding: 1px 6px; border-radius: 3px; background: rgba(67,56,202,0.1); color: var(--indigo); text-transform: uppercase; letter-spacing: 0.3px; }
   .ab-srow .ab-sdesc { color: var(--dim); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-  .story-row.story-live > * { background: var(--indigo-light); }
+  @keyframes liveBg { 0%,100%{ background: var(--indigo-light); } 50%{ background: rgba(67,56,202,0.03); } }
+  .story-row.story-live > * { animation: liveBg 3s ease-in-out infinite; }
   .story-row.story-live > :first-child { box-shadow: inset 3px 0 0 var(--indigo); }
 
   /* ── Stats ── */
@@ -669,9 +671,20 @@ function renderAgent(d) {
     storiesEl.innerHTML = '';
   }
 
-  const steps = getSteps(a.step);
-  const ci = stepI(a.step);
-  prog.innerHTML = steps.map((_, i) => `<div class="ab-bar ${i < ci ? 'done' : i === ci ? 'now' : ''}"></div>`).join('');
+  if (storyKeys.length > 1) {
+    // Per-story progress: show a mini bar per story
+    const total = getSteps('').length || 8;
+    prog.innerHTML = storyKeys.map(k => {
+      const ss = storyMap[k];
+      const si = stepI(ss.step);
+      const pct = Math.max(5, Math.round(((si + 1) / total) * 100));
+      return `<div class="ab-bar-multi" style="flex:1"><div style="width:${pct}%;height:100%;border-radius:2px;background:var(--indigo);opacity:${si > 0 ? 0.7 : 0.3}"></div></div>`;
+    }).join('');
+  } else {
+    const steps = getSteps(a.step);
+    const ci = stepI(a.step);
+    prog.innerHTML = steps.map((_, i) => `<div class="ab-bar ${i < ci ? 'done' : i === ci ? 'now' : ''}"></div>`).join('');
+  }
 }
 
 /* ── DOM State ── */
@@ -761,111 +774,20 @@ function openSpecPanel(storyId, title) {
 /* ── Plan launch + question/answer flow ── */
 var _activePlans = {};
 function launchPlan(storyId, title) {
-  if (_activePlans[storyId]) return; // already running
+  if (_activePlans[storyId]) return;
   _activePlans[storyId] = true;
-  const overlay = cel('div', 'spec-overlay');
-  const panel = cel('div', 'spec-panel');
-
-  const header = cel('div', 'spec-header');
-  header.appendChild(cel('span', 'spec-header-title', '#' + storyId + ' \u2014 ' + title));
-  const closeBtn = cel('button', 'spec-close', '\u2715');
-  closeBtn.onclick = function() { clearInterval(pollTimer); delete _activePlans[storyId]; overlay.remove(); };
-  header.appendChild(closeBtn);
-  panel.appendChild(header);
-
-  const body = cel('div', 'spec-body');
-  body.innerHTML = '<div class="q-progress"><span class="q-spinner"></span>Starter analyse\u2026</div>';
-  panel.appendChild(body);
-
-  const footer = cel('div', 'spec-footer');
-  const cancelBtn = cel('button', 'btn-cancel', 'Luk');
-  cancelBtn.onclick = function() { clearInterval(pollTimer); delete _activePlans[storyId]; overlay.remove(); };
-  footer.appendChild(cancelBtn);
-  panel.appendChild(footer);
-
-  overlay.appendChild(panel);
-  overlay.onclick = function(e) { if (e.target === overlay) { clearInterval(pollTimer); delete _activePlans[storyId]; overlay.remove(); } };
-  document.body.appendChild(overlay);
-
-  // Launch the plan agent
   fetch('/api/plan', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({storyId: storyId}) })
-    .catch(() => { body.innerHTML = '<div class="q-progress" style="color:var(--red)">Kunne ikke starte analyse.</div>'; });
-
-  // Poll for questions or completion
-  let answered = false;
-  var pollTimer = setInterval(function() {
-    // Check for questions
-    fetch('/api/questions/' + storyId)
-      .then(r => { if (!r.ok) throw new Error('none'); return r.json(); })
-      .then(qData => {
-        if (!answered) {
-          clearInterval(pollTimer);
-          showQuestions(body, footer, storyId, qData, function() {
-            // After answering, resume polling for more questions or completion
-            answered = false;
-            body.innerHTML = '<div class="q-progress"><span class="q-spinner"></span>Agenten forts\u00e6tter\u2026</div>';
-            // Remove submit button
-            var sub = footer.querySelector('.btn-submit-answers');
-            if (sub) sub.remove();
-            pollTimer = setInterval(pollCheck, 3000);
-          });
-        }
-      })
-      .catch(() => {});
-
-    // Check agent status — if idle, plan is done
-    fetch('/api/agent-status').then(r => r.json()).then(ag => {
-      if (!ag.active && body.querySelector('.q-progress')) {
-        // Agent finished — check if story is now planned
-        fetch('/api/task-map').then(r => r.json()).then(tm => {
-          const mapped = tm.mappings && tm.mappings.some(m => m.storyId === Number(storyId));
-          if (mapped) {
-            clearInterval(pollTimer);
-            body.innerHTML = '<div class="q-progress" style="color:var(--green)">\u2713 Analyse f\u00e6rdig \u2014 story er nu planlagt.</div>';
-            setTimeout(() => { delete _activePlans[storyId]; overlay.remove(); location.reload(); }, 2000);
-          }
-        }).catch(() => {});
-      } else if (ag.active) {
-        // Update progress text
-        const stories = ag.active.stories || {};
-        const sInfo = stories[String(storyId)];
-        const step = sInfo ? sInfo.step : ag.active.step;
-        const detail = sInfo ? sInfo.detail : ag.active.detail;
-        const prog = body.querySelector('.q-progress');
-        if (prog && step) {
-          prog.innerHTML = '<span class="q-spinner"></span>' + escH(step) + (detail ? ' \u2014 ' + escH(detail) : '');
-        }
-      }
-    }).catch(() => {});
-  }, 3000);
-  // Alias for restarting poll after answer
-  var pollCheck = function() {
-    fetch('/api/questions/' + storyId)
-      .then(r => { if (!r.ok) throw new Error('none'); return r.json(); })
-      .then(qData => {
-        clearInterval(pollTimer);
-        showQuestions(body, footer, storyId, qData, function() {
-          answered = false;
-          body.innerHTML = '<div class="q-progress"><span class="q-spinner"></span>Agenten forts\u00e6tter\u2026</div>';
-          var sub = footer.querySelector('.btn-submit-answers');
-          if (sub) sub.remove();
-          pollTimer = setInterval(pollCheck, 3000);
-        });
-      })
-      .catch(() => {});
-    fetch('/api/agent-status').then(r => r.json()).then(ag => {
-      if (!ag.active) {
-        fetch('/api/task-map').then(r => r.json()).then(tm => {
-          const mapped = tm.mappings && tm.mappings.some(m => m.storyId === Number(storyId));
-          if (mapped) {
-            clearInterval(pollTimer);
-            body.innerHTML = '<div class="q-progress" style="color:var(--green)">\u2713 Analyse f\u00e6rdig.</div>';
-            setTimeout(() => { delete _activePlans[storyId]; overlay.remove(); location.reload(); }, 2000);
-          }
-        }).catch(() => {});
-      }
-    }).catch(() => {});
-  };
+    .then(r => r.json())
+    .then(() => {
+      // Brief toast notification
+      const toast = cel('div', '');
+      toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--cyan);color:#fff;padding:10px 24px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:600;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,0.15);';
+      toast.textContent = 'Analyse startet for #' + storyId;
+      document.body.appendChild(toast);
+      setTimeout(() => { toast.remove(); delete _activePlans[storyId]; }, 3000);
+    })
+    .catch(() => { delete _activePlans[storyId]; });
+  return;
 }
 
 function showQuestions(body, footer, storyId, qData, onAnswered) {
@@ -1003,6 +925,13 @@ function buildStoryRow(s, ctx) {
     titleCell.appendChild(planBtn);
   }
   if (cls === 'planned' || cls === 'partial') {
+    const reBtn = cel('button', 'btn-plan', 'Re-analys\u00e9r');
+    reBtn.style.right = '108px';
+    reBtn.onclick = function(e) {
+      e.stopPropagation();
+      launchPlan(s.id, s.title);
+    };
+    titleCell.appendChild(reBtn);
     const btn = cel('button', 'btn-exec', 'Udf\u00f8r plan');
     btn.onclick = function(e) {
       e.stopPropagation();
