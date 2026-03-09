@@ -78,10 +78,10 @@ If the intent is ambiguous, use `AskUserQuestion` to clarify:
 
 **Step 3 — Present plan for confirmation:**
 
-Before creating anything, show the user what will be created:
+Show the user what will be created, then proceed directly to Step 4 (no confirmation needed — incorrect items can be deleted in Azure DevOps):
 
 ```
-Plan:
+Creating:
 
   [User Story] "Tilføj prisområde-kolonne til kundelisten"
     [Task] "Backend: Tilføj prisområde-felt til API response"
@@ -90,12 +90,6 @@ Plan:
 
 All items will be assigned to the current sprint.
 ```
-
-Use `AskUserQuestion` with options: "Create" / "Edit" / "Cancel"
-
-- **Create**: proceed to Step 4.
-- **Edit**: respond with plain text "Hvad vil du ændre?" and STOP. Wait for the user's free-text reply (do NOT use AskUserQuestion). Then update the plan, re-present for confirmation.
-- **Cancel**: stop.
 
 **Step 4 — Create work items:**
 
@@ -125,17 +119,11 @@ Sprint: Sprint 39 - 2026
 https://verdo365.visualstudio.com/.../_workitems/edit/42950
 ```
 
-**Step 6 — Offer to plan:**
+**Step 6 — Show next step:**
 
-After displaying the summary, ask the user if they want to plan the story immediately.
+After displaying the summary, show the next step as plain text. Do NOT prompt or use `AskUserQuestion`.
 
-Use `AskUserQuestion`:
-- Question: "Vil du planlægge story #<id> nu?"
-- Options:
-  - "Ja, kør /devsprint-plan" — invoke the Skill tool with `devsprint-plan` and the story ID as argument
-  - "Nej" — done, stop here
-
-If the user chooses to plan: invoke `/devsprint-plan <storyId>` via the Skill tool.
+Display: "Next step: `/devsprint-plan {storyId}` to analyze and create spec."
 
 </process>
 

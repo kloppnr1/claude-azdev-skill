@@ -19,7 +19,7 @@ When the user chooses an option that means "change something" / "correct somethi
 </context_rule>
 
 <objective>
-Fetch assigned stories from the current Azure DevOps sprint, ask the user which repo each story belongs to, interactively verify each story with the user, update story descriptions in Azure DevOps, generate a detailed STORY.md spec per story (optimized for both human reading and AI-driven implementation), and present each for user approval. Write devsprint-task-map.json for status tracking during execution.
+Fetch assigned stories from the current Azure DevOps sprint, auto-detect the target repo per story, analyze the codebase, update story descriptions in Azure DevOps, generate a detailed STORY.md spec per story (optimized for both human reading and AI-driven implementation), and present each for review. Write devsprint-task-map.json for status tracking during execution. Minimizes prompts — only asks the user when auto-detection fails or for spec review feedback.
 
 If a story ID is provided as argument, only process that single story (skip multi-story summary, go straight to analysis).
 </objective>
@@ -86,6 +86,10 @@ Check for the `--no-devops-update` flag in the arguments:
 - If present: set `skipDevOpsUpdate = true`. This skips ALL writes to Azure DevOps (description, acceptance criteria, and comments). The local STORY.md spec is still generated normally.
 - If not present: set `skipDevOpsUpdate = false` (default — Azure DevOps fields are updated).
 
+Check for the `--reanalyze` flag in the arguments:
+- If present: set `forceReanalyze = true`. This forces re-analysis of all stories even if they have existing specs.
+- If not present: set `forceReanalyze = false` (default — previously analyzed stories are skipped automatically).
+
 **Step 1 — Check prerequisites:**
 
 1. Verify `~/.claude/bin/devsprint-tools.cjs` exists via Bash `test -f ~/.claude/bin/devsprint-tools.cjs`.
@@ -130,11 +134,9 @@ For each story to process, check if it has already been analyzed in a previous s
 2. If found, check if `{repoPath}/.planning/stories/{storyId}.md` exists.
 3. If BOTH exist (task map entry + spec file): the story has been previously analyzed.
 
-For previously analyzed stories, ask the user:
-- Question: "#{id} ({title}) er allerede analyseret. Ny analyse?"
-- Options: "Nej, behold eksisterende" / "Ja, analyser forfra"
-- If "Nej": **skip this story entirely** — no repo analysis, no spec generation, no DevOps update. Mark as "kept existing" in the final summary.
-- If "Ja": proceed normally through Steps 4–11 (full re-analysis).
+For previously analyzed stories: display "#{id} — allerede analyseret, beholder eksisterende spec." and **skip this story entirely** — no repo analysis, no spec generation, no DevOps update. Mark as "kept existing" in the final summary. No prompt needed.
+
+If the user passes `--reanalyze` flag in the arguments: re-analyze all stories regardless of existing specs. Parse this flag in Step 0 alongside other arguments.
 
 For stories WITHOUT an existing analysis: proceed normally (no question asked).
 
@@ -147,24 +149,27 @@ For each story, check its `tags` array (case-insensitive). If tags include `"res
 
 **Step 4 — Ask user for target repo per story:**
 
-For each story to process, ask the user which Azure DevOps repository it belongs to.
+For each story to process, auto-detect the target repository. Only ask the user if auto-detection fails.
 
-1. **Fetch repos from Azure DevOps:** Run `node ~/.claude/bin/devsprint-tools.cjs list-repos --cwd $CWD`.
-   Parse the JSON array of `{name, id, remoteUrl}`.
+1. **Check existing task map first:** If `$CWD/.planning/devsprint-task-map.json` exists, check if this story already has a `repoPath` mapping. If so, use that repo directly — display "#{id} → {repoName} (from task map)" and skip to step 5.
 
-2. **Check existing task map:** If `$CWD/.planning/devsprint-task-map.json` exists, check if this story already has a `repoPath` mapping. If so, use the repo name from that path as the default suggestion.
+2. **Check if all other stories map to the same repo:** If the task map has other mappings and they ALL point to the same repo, use that repo — display "#{id} → {repoName} (same as other stories)".
 
-3. **Ask the user** using `AskUserQuestion`:
-   - Question: "Which repo should story #{id} ({title}) be planned in?"
-   - Options: list the Azure DevOps repo names as options (max 4, prioritize repos already in the task map). The user can also type a custom name/path via "Other".
+3. **Scan parent directory:** Check if the parent directory of `$CWD` has exactly one repo folder (directory with `.git`). If exactly one: use that repo.
 
-4. **Resolve the local path:**
+4. **Only ask if none of the above resolves a repo:**
+   - Fetch repos from Azure DevOps: Run `node ~/.claude/bin/devsprint-tools.cjs list-repos --cwd $CWD`.
+   - Ask the user using `AskUserQuestion`:
+     - Question: "Which repo should story #{id} ({title}) be planned in?"
+     - Options: list the Azure DevOps repo names as options (max 4, prioritize repos already in the task map). The user can also type a custom name/path via "Other".
+
+5. **Resolve the local path:**
    - Scan the parent directory of `$CWD` for a folder matching the selected repo name: `test -d "{parentDir}/{repoName}/.git"`
    - If found: use `{parentDir}/{repoName}` as the path.
    - If NOT found: ask the user for the local path to the repo using `AskUserQuestion`: "Repo '{repoName}' not found at {parentDir}/{repoName}. Where is it cloned locally?"
    - If the user provides a custom path: verify it exists and contains `.git` via Bash. If not, warn and re-ask.
 
-5. Store the resolved `repoPath` for this story. Continue to Step 4.5.
+6. Store the resolved `repoPath` for this story. Continue to Step 4.5.
 
 **Step 4.5 — Repo analysis per story:**
 
@@ -209,7 +214,7 @@ Store this analysis per story — it is used in Step 5.5 for the interactive ver
 
 **Skip this step entirely if `singleStoryMode` is true.** Go directly to Step 5.5.
 
-Display summary in this format:
+Display summary in this format and continue immediately to Step 5.5 (no confirmation needed):
 ```
 === Analysis: {sprintName} ===
 
@@ -218,10 +223,8 @@ You have {N} stories:
   [US] #{id} -- {title} ({state}) → {repoName}
   [US] #{id} -- {title} ({state}) → {repoName}
 
-Proceed to analyze? (yes/no)
+Analyzing...
 ```
-
-Use `AskUserQuestion` tool for confirmation. If the user says "no" or anything other than "yes", stop with: "Analysis cancelled. No changes made."
 
 **Step 5.5 — Interactive verification per story:**
 
@@ -296,12 +299,15 @@ Only proceed to confirmation when you have enough detail for every STORY.md sect
 
 The goal is to **explore the problem together** before committing to a plan. Research stories often don't have clear requirements upfront — the plan process IS the requirements process.
 
-Use `AskUserQuestion` with:
+**For non-research stories:** Display the verification summary (it's useful for the user to see) but continue automatically to spec generation. No prompt needed. Store the understanding (summary text + work type) for this story.
+
+**For research stories (`researchMode`):** Keep the interactive dialogue — this IS the requirements process. Use `AskUserQuestion` with:
 - Question: "Is this understanding correct for #{id}?"
 - Options: "Yes" / "No, let me correct it"
+If "Yes": store the verified understanding and continue.
+If "No, let me correct it": respond with plain text "Hvad skal rettes?" and STOP. Wait for the user's free-text reply. Incorporate feedback, re-present, confirm again.
 
-If "Yes": store the verified understanding (summary text + work type) for this story.
-If "No, let me correct it": respond with plain text "Hvad skal rettes?" and STOP. Wait for the user's free-text reply (do NOT use AskUserQuestion — let them type freely). Then incorporate their feedback, re-present the corrected version, and confirm again. Repeat until approved.
+**For ALL stories:** If the information completeness check (above) identifies missing critical details, still ask targeted questions before continuing — regardless of research mode.
 
 The verified understanding per story is used in later steps for project file generation.
 
@@ -499,19 +505,17 @@ If a check fails and the information exists (in the story, repo, or verified und
 
 **Step 11 — Present for approval:**
 
-After generating STORY.md, show the user the full content. Use `AskUserQuestion`:
+After generating STORY.md, show the user the full content:
 
-"Review the generated story spec:
-
-STORY.md has been written to {repoPath}/.planning/stories/{storyId}.md
+"STORY.md has been written to {repoPath}/.planning/stories/{storyId}.md"
 
 [Show the full STORY.md content]
 
-Approve, request changes, or skip? (approve/changes/skip)"
+Then display: **"Ændringer?"** and STOP. Wait for the user's free-text reply. This is a simple free-text flow — no `AskUserQuestion`.
 
-- If "approve": keep the file, post spec to Azure DevOps (Step 11.1), then move to next story.
-- If "changes": respond with plain text "Hvad vil du ændre?" and STOP. Wait for the user's free-text reply (do NOT use AskUserQuestion — let them type freely). Then incorporate the feedback, and **re-present the FULL updated STORY.md content** before asking for approval again. The user must always see the complete spec before approving — never ask for approval without showing the full content first. Repeat until approved or skipped.
-- If "skip": delete the file. Note the skip in the final summary.
+- If the user writes changes/corrections: incorporate them, re-write the STORY.md file, **re-present the FULL updated content**, and ask "Ændringer?" again. Repeat until the user is satisfied.
+- If the user says "ok", "nej", "fortsæt", "lgtm", or similar affirmative/continue: keep the file, post spec to Azure DevOps (Step 11.1), then move to next story.
+- If the user says "skip": delete the file. Note the skip in the final summary.
 
 **Step 11.1 — Post spec as Azure DevOps comment:**
 
@@ -592,19 +596,13 @@ If `singleStoryMode`: simplify the summary to just show the single story result.
 
 **Step 13 — Prompt to start execution:**
 
-After displaying the final summary, immediately prompt the user to start execution. The prompt depends on which mode was used:
+After displaying the final summary, show the next step as plain text. Do NOT prompt or use `AskUserQuestion`.
 
 **If `singleStoryMode`** (planned a single story):
-- Ask: "Start execute for #{targetStoryId}?"
-- Options: "Yes — execute now" / "No — I'm done for now"
-- If yes: run `/devsprint-execute {targetStoryId}` via the Skill tool.
-- If no: end with "Planning complete. Run `/devsprint-execute {targetStoryId}` when you're ready."
+- Display: "Planning complete. Run `/devsprint-execute {targetStoryId}` to implement."
 
 **If all-stories mode** (planned the full sprint):
-- Ask: "Start executing the full sprint?"
-- Options: "Yes — execute all stories" / "No — I'm done for now"
-- If yes: run `/devsprint-execute` (no argument) via the Skill tool to execute the full sprint.
-- If no: end with "Planning complete. Run `/devsprint-execute` when you're ready."
+- Display: "Planning complete. Run `/devsprint-execute` to implement all stories."
 
 </process>
 
@@ -628,14 +626,14 @@ After displaying the final summary, immediately prompt the user to start executi
 - Single-story mode: `/devsprint-plan 42920` processes only story #42920 without multi-story summary
 - All-stories mode: `/devsprint-plan` (no args) processes all assigned stories as before
 - Task/child ID argument resolves to parent story automatically
-- User selects repo from Azure DevOps project repos (fetched via list-repos)
+- Repo is auto-detected from task map or parent directory; user is only asked when auto-detection fails
 - Repo choice is stored in devsprint-task-map.json for use during execution
-- Each story is interactively verified with the user before file generation (Step 5.5)
+- Each story's analysis is shown to the user (Step 5.5) — non-research stories continue automatically, research stories use interactive dialogue
 - Verified analysis replaces the story description in Azure DevOps (Step 5.6)
 - STORY.md contains specific, concrete details (file paths, class names, contacts, blockers) — not generic placeholders
 - Open questions and blockers from the story description are explicitly captured
 - Stories are correctly categorized by work type (code change vs manual/operational vs blocked)
-- User can approve or request changes per repo before files are finalized
+- User can review and request changes to STORY.md via free-text flow (no AskUserQuestion)
 - No HTML artifacts appear in any generated file
 - devsprint-task-map.json merges with existing entries (does not overwrite unrelated stories)
 - Task IDs in the map can be used to update status (New → Active → Resolved) during execution

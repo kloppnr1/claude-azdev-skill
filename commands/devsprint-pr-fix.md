@@ -83,7 +83,7 @@ URL: {url}
 Linked stories: {workItemIds or "none"}
 ```
 
-If status is "completed" or "abandoned": warn "PR is already {status}. Continue anyway?" Use AskUserQuestion. If no, stop.
+If status is "completed" or "abandoned": display "PR #{prId} is {status} — skipping." and stop. No prompt needed.
 
 **Step 4 — Fetch PR comment threads:**
 
@@ -114,12 +114,7 @@ General:
   {comment content}
 ```
 
-Use `AskUserQuestion`:
-- Question: "Fix all unresolved comments, or select specific ones?"
-- Options: "Fix all" / "Let me select"
-
-If "Let me select": present each comment and let user include/exclude. Store the selected thread IDs.
-If "Fix all": use all active threads.
+Default: fix all unresolved comments. Display the comments (so the user sees them) and proceed directly to Step 6. No prompt needed.
 
 **Step 6 — Resolve local repo path and check out PR branch:**
 
@@ -160,7 +155,7 @@ For each selected comment thread:
 
 Run the full test suite one final time after all fixes are applied.
 - If tests pass: proceed to push.
-- If tests fail: warn user and ask whether to push anyway or fix first.
+- If tests fail: attempt to fix the failing tests. If they still fail after a second attempt: abort push, display "Tests still failing — push aborted. Fix manually." and stop. No prompt needed.
 
 **Step 9 — Push fixes:**
 

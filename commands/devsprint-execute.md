@@ -114,7 +114,7 @@ Check if the user passed a story ID as argument (e.g., `/devsprint-execute 42920
 - If no argument: `mode = "all"`.
 
 **Behavioral rules by mode:**
-- `single` mode: interactive. The agent uses `AskUserQuestion` when encountering blockers or ambiguity during implementation. Stop on errors.
+- `single` mode: mostly autonomous. The agent makes best judgment calls on blockers and continues. Only uses `AskUserQuestion` if the story spec explicitly marks something as "BLOKERER implementation". Stop on critical errors.
 - `all` mode: fully autonomous. The agent does NOT use `AskUserQuestion` at any point. If you encounter a blocker on one story, log the error and move on to the next story. The user expects to walk away and come back to completed work.
 
 **Context isolation:** In both modes, each story runs inside its own Agent to keep the main conversation lightweight and prevent context exhaustion. The orchestrator only handles pre-flight checks, agent launching, log writing, and the final summary.
@@ -215,7 +215,7 @@ Summary: {pendingCount} to execute, {completedCount} already done, {skippedCount
 
 If `mode === "single"`:
 - Find the mapping where `storyId` matches `targetStoryId`. If not found: "Story #{targetStoryId} is not in the task map. Available stories: {list}." Stop.
-- If the story is `already-executed` or `already-resolved`: warn user "Story #{targetStoryId} was already completed. Run with `--force` or resolve manually." In single mode, use `AskUserQuestion` to confirm if user wants to re-execute.
+- If the story is `already-executed` or `already-resolved`: display "Story #{targetStoryId} already completed. Use `--force` to re-execute." and stop. No prompt needed.
 - Store as a single-item list: `storiesToExecute = [matching mapping]`.
 
 If `mode === "all"`:
@@ -255,7 +255,7 @@ Launch an Agent with the full execution instructions for this single story (Step
 
 **Mode-specific agent instructions:**
 - `all` mode: Include instruction to NEVER use `AskUserQuestion` — fully autonomous. On blockers, make best judgment and continue.
-- `single` mode: Include instruction to USE `AskUserQuestion` when encountering blockers or ambiguity — interactive mode. Stop on errors and consult the user via `AskUserQuestion`.
+- `single` mode: Include instruction to make best judgment and continue on blockers, like `all` mode. Only use `AskUserQuestion` if the story spec explicitly marks something as "BLOKERER implementation". Stop on critical errors (missing spec, test baseline failures).
 
 Do NOT run agents in background — run them sequentially so each story completes before the next starts. Parse the agent's returned summary, add to `executionResults`, and **immediately write to the execution log** (Step 4i) before launching the next agent. This ensures progress is persisted even if a later story crashes or the session is interrupted.
 
@@ -380,9 +380,10 @@ Execute Steps 4a–4h below. In `all` mode: if any step encounters a non-fatal e
   5. **Match tasks to work**: As you complete work that corresponds to a specific Azure DevOps task (from `taskTitles`), note which tasks have been completed.
 
   6. **Handle blockers**:
-     - `single` mode: use `AskUserQuestion` to consult the user. Do not guess at requirements.
-     - `all` mode: make your best judgment call and proceed. Log any assumptions. Do NOT ask the user.
-     - If the story spec has "Open Questions & Blockers": skip blocked items, implement what you can.
+     - Both `single` and `all` mode: make your best judgment call and proceed. Log any assumptions.
+     - Only use `AskUserQuestion` (in `single` mode only) if the story spec explicitly marks something as "BLOKERER implementation" — this indicates the spec author determined it cannot be resolved without user input.
+     - `all` mode: NEVER use `AskUserQuestion`. Make best judgment and continue.
+     - If the story spec has "Open Questions & Blockers": skip items marked as blocking, implement what you can.
 
   7. **Commit changes**: Tests and implementation should already be committed from the TDD cycles above. If any uncommitted changes remain, commit them with descriptive messages referencing the story ID.
 
