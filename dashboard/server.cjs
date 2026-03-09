@@ -322,6 +322,32 @@ async function handleRequest(req, res) {
     res.setHeader('Content-Type', 'application/json');
     try {
       let data;
+
+      // Parameterized routes: /api/questions/{id} and /api/answers/{id}
+      const qMatch = pathname.match(/^\/api\/questions\/(\d+)$/);
+      const aMatch = pathname.match(/^\/api\/answers\/(\d+)$/);
+      if (qMatch) {
+        const qDir = path.join(CWD, '.planning', 'questions');
+        const qFile = path.join(qDir, qMatch[1] + '.json');
+        data = readJsonFile(qFile);
+        if (!data) { res.writeHead(404); res.end(JSON.stringify({ error: 'No questions' })); return; }
+        res.writeHead(200); res.end(JSON.stringify(data)); return;
+      }
+      if (aMatch) {
+        if (req.method === 'POST') {
+          let body = '';
+          req.on('data', c => body += c);
+          await new Promise(r => req.on('end', r));
+          const aDir = path.join(CWD, '.planning', 'answers');
+          if (!fs.existsSync(aDir)) fs.mkdirSync(aDir, { recursive: true });
+          fs.writeFileSync(path.join(aDir, aMatch[1] + '.json'), body, 'utf-8');
+          data = { status: 'saved', storyId: Number(aMatch[1]) };
+          res.writeHead(200); res.end(JSON.stringify(data)); return;
+        } else {
+          res.writeHead(405); res.end(JSON.stringify({ error: 'POST only' })); return;
+        }
+      }
+
       switch (pathname) {
         case '/api/sprint':
           data = await fetchSprintData();
@@ -360,8 +386,35 @@ async function handleRequest(req, res) {
             const { storyId } = JSON.parse(body);
             if (!storyId) { res.writeHead(400); res.end(JSON.stringify({ error: 'storyId required' })); return; }
             const { exec: execFn } = require('child_process');
-            execFn(`start cmd /k "cd /d ${CWD} && claude /devsprint-execute ${storyId} --headless"`, { shell: true });
+            const cleanEnv = Object.assign({}, process.env);
+            delete cleanEnv.CLAUDECODE;
+            const execBat = path.join(CWD, '.planning', '_run_exec.bat');
+            fs.writeFileSync(execBat, `@echo off\nset "CLAUDECODE="\ncd /d "${CWD}"\nclaude -p "/devsprint-execute ${storyId} --headless" --dangerously-skip-permissions --verbose\npause\n`);
+            execFn(`start cmd /k "${execBat}"`, { shell: true });
             data = { status: 'launched', storyId };
+          } else {
+            res.writeHead(405); res.end(JSON.stringify({ error: 'POST only' })); return;
+          }
+          break;
+        case '/api/plan':
+          if (req.method === 'POST') {
+            let body = '';
+            req.on('data', c => body += c);
+            await new Promise(r => req.on('end', r));
+            const { storyId: planId } = JSON.parse(body);
+            if (!planId) { res.writeHead(400); res.end(JSON.stringify({ error: 'storyId required' })); return; }
+            // Clean up stale question/answer files
+            const qClean = path.join(CWD, '.planning', 'questions', planId + '.json');
+            const aClean = path.join(CWD, '.planning', 'answers', planId + '.json');
+            try { if (fs.existsSync(qClean)) fs.unlinkSync(qClean); } catch {}
+            try { if (fs.existsSync(aClean)) fs.unlinkSync(aClean); } catch {}
+            const { exec: planExec } = require('child_process');
+            const planEnv = Object.assign({}, process.env);
+            delete planEnv.CLAUDECODE;
+            const planBat = path.join(CWD, '.planning', '_run_plan.bat');
+            fs.writeFileSync(planBat, `@echo off\nset "CLAUDECODE="\ncd /d "${CWD}"\nclaude -p "/devsprint-plan ${planId} --headless --reanalyze" --dangerously-skip-permissions --verbose\npause\n`);
+            planExec(`start cmd /k "${planBat}"`, { shell: true });
+            data = { status: 'launched', storyId: planId };
           } else {
             res.writeHead(405); res.end(JSON.stringify({ error: 'POST only' })); return;
           }

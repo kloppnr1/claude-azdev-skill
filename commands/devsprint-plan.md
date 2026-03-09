@@ -86,9 +86,63 @@ Check for the `--no-devops-update` flag in the arguments:
 - If present: set `skipDevOpsUpdate = true`. This skips ALL writes to Azure DevOps (description, acceptance criteria, and comments). The local STORY.md spec is still generated normally.
 - If not present: set `skipDevOpsUpdate = false` (default — Azure DevOps fields are updated).
 
+Check for the `--headless` flag in the arguments:
+- If present: set `headless = true`. In headless mode, NEVER use `AskUserQuestion`. Instead, write questions to `.planning/questions/{storyId}.json` and poll for answers at `.planning/answers/{storyId}.json`. See **Headless question/answer protocol** below.
+- If not present: set `headless = false` (default — interactive mode with `AskUserQuestion`).
+
 Check for the `--reanalyze` flag in the arguments:
 - If present: set `forceReanalyze = true`. This forces re-analysis of all stories even if they have existing specs.
 - If not present: set `forceReanalyze = false` (default — previously analyzed stories are skipped automatically).
+
+**Headless question/answer protocol (only when `headless = true`):**
+
+When running headless, you cannot use `AskUserQuestion`. Instead, use file-based communication with the dashboard:
+
+1. **Writing questions:** When you need user input (repo selection, verification, research dialogue, etc.), write all questions to a single file:
+   ```
+   mkdir -p "$CWD/.planning/questions"
+   ```
+   Then use the Write tool to create `$CWD/.planning/questions/{storyId}.json`:
+   ```json
+   {
+     "storyId": 42920,
+     "storyTitle": "Story title here",
+     "timestamp": "2026-03-09T10:00:00Z",
+     "questions": [
+       { "id": "q1", "text": "Which repo should this story target?", "type": "choice", "options": ["RepoA", "RepoB", "Other"] },
+       { "id": "q2", "text": "Any additional context for this story?", "type": "text" }
+     ]
+   }
+   ```
+   Question types: `"text"` (free-form textarea) or `"choice"` (radio buttons with `options` array).
+
+2. **Waiting for answers:** After writing the questions file, poll for answers every 5 seconds:
+   ```bash
+   test -f "$CWD/.planning/answers/{storyId}.json" && echo "found" || echo "waiting"
+   ```
+   Keep polling until the file exists (max 10 minutes, then auto-continue with best-effort defaults).
+
+3. **Reading answers:** Once the answers file exists, read `$CWD/.planning/answers/{storyId}.json`:
+   ```json
+   {
+     "storyId": 42920,
+     "storyTitle": "Story title here",
+     "answers": [
+       { "id": "q1", "answer": "RepoA" },
+       { "id": "q2", "answer": "Some extra context" }
+     ]
+   }
+   ```
+   Use the answers to continue the plan as if the user had answered interactively.
+
+4. **Cleanup:** After reading answers, delete BOTH files:
+   ```bash
+   rm -f "$CWD/.planning/questions/{storyId}.json" "$CWD/.planning/answers/{storyId}.json"
+   ```
+
+5. **When NOT to ask questions in headless mode:** If auto-detection succeeds (repo found in task map, parent dir, etc.), do NOT write questions — just continue silently. Only write questions when you genuinely need user input that cannot be auto-resolved.
+
+6. **Non-research stories in headless mode:** For non-research stories where information is sufficient, skip the interactive verification entirely — auto-approve and continue to spec generation. Only write questions if the information completeness check (Step 5.5) identifies missing critical details.
 
 **Step 1 — Check prerequisites:**
 
@@ -196,14 +250,16 @@ For each story to process, auto-detect the target repository. Only ask the user 
 
 4. **Only ask if none of the above resolves a repo:**
    - Fetch repos from Azure DevOps: Run `node ~/.claude/bin/devsprint-tools.cjs list-repos --cwd $CWD`.
-   - Ask the user using `AskUserQuestion`:
+   - **If `headless = true`:** Write a question file using the headless protocol. Use `type: "choice"` with the repo names as options. Then poll for the answer.
+   - **If `headless = false`:** Ask the user using `AskUserQuestion`:
      - Question: "Which repo should story #{id} ({title}) be planned in?"
      - Options: list the Azure DevOps repo names as options (max 4, prioritize repos already in the task map). The user can also type a custom name/path via "Other".
 
 5. **Resolve the local path:**
    - Scan the parent directory of `$CWD` for a folder matching the selected repo name: `test -d "{parentDir}/{repoName}/.git"`
    - If found: use `{parentDir}/{repoName}` as the path.
-   - If NOT found: ask the user for the local path to the repo using `AskUserQuestion`: "Repo '{repoName}' not found at {parentDir}/{repoName}. Where is it cloned locally?"
+   - **If `headless = true` and NOT found:** Write a question asking for the local path, then poll for the answer.
+   - **If `headless = false` and NOT found:** Ask the user for the local path to the repo using `AskUserQuestion`: "Repo '{repoName}' not found at {parentDir}/{repoName}. Where is it cloned locally?"
    - If the user provides a custom path: verify it exists and contains `.git` via Bash. If not, warn and re-ask.
 
 6. Store the resolved `repoPath` for this story. Continue to Step 4.5.
@@ -294,6 +350,10 @@ For each story, present the following to the user:
 - Are there implicit assumptions that should be made explicit?
 
 If information is insufficient, **ask targeted questions** instead of guessing:
+
+**If `headless = true`:** Write questions using the headless protocol (file-based). Each missing piece of information becomes a question with `type: "text"`. Then poll for answers and incorporate them before continuing.
+
+**If `headless = false`:** Ask directly in the conversation:
 ```
 I need more detail to write a good spec for #{id}:
 
@@ -336,11 +396,13 @@ Only proceed to confirmation when you have enough detail for every STORY.md sect
 
 The goal is to **explore the problem together** before committing to a plan. Research stories often don't have clear requirements upfront — the plan process IS the requirements process.
 
-**For non-research stories:** Display the verification summary (it's useful for the user to see) but continue automatically to spec generation. No prompt needed. Store the understanding (summary text + work type) for this story.
+**For non-research stories:** Display the verification summary (it's useful for the user to see) but continue automatically to spec generation. No prompt needed. Store the understanding (summary text + work type) for this story. **In headless mode:** same behavior — auto-continue without questions if info is sufficient.
 
-**For research stories (`researchMode`):** Keep the interactive dialogue — this IS the requirements process. Use `AskUserQuestion` with:
-- Question: "Is this understanding correct for #{id}?"
-- Options: "Yes" / "No, let me correct it"
+**For research stories (`researchMode`):** Keep the interactive dialogue — this IS the requirements process.
+- **If `headless = true`:** Write the research findings and open questions as a question file using the headless protocol. Include the findings summary as context in the question text, and ask the user to pick an approach and answer open questions. Poll for answers, then continue.
+- **If `headless = false`:** Use `AskUserQuestion` with:
+  - Question: "Is this understanding correct for #{id}?"
+  - Options: "Yes" / "No, let me correct it"
 If "Yes": store the verified understanding and continue.
 If "No, let me correct it": respond with plain text "Hvad skal rettes?" and STOP. Wait for the user's free-text reply. Incorporate feedback, re-present, confirm again.
 
@@ -542,7 +604,9 @@ If a check fails and the information exists (in the story, repo, or verified und
 
 **Step 11 — Present for approval:**
 
-After generating STORY.md, show the user the full content:
+**If `headless = true`:** Auto-approve the spec. The user can review it later in the dashboard (the spec panel shows STORY.md content). Skip the interactive review and go directly to Step 11.1. The dashboard will show the story as "planned" once the task map is written.
+
+**If `headless = false`:** After generating STORY.md, show the user the full content:
 
 "STORY.md has been written to {repoPath}/.planning/stories/{storyId}.md"
 
@@ -631,9 +695,14 @@ Next steps:
 
 If `singleStoryMode`: simplify the summary to just show the single story result.
 
-**Step 12.5 — Clear dashboard status:**
+**Step 12.5 — Clear dashboard status and clean up:**
 
 Run `node ~/.claude/bin/devsprint-tools.cjs clear-status --cwd $CWD` to mark the agent as idle.
+
+If `headless = true`: clean up any leftover question/answer files for processed stories:
+```bash
+rm -f "$CWD/.planning/questions/{storyId}.json" "$CWD/.planning/answers/{storyId}.json"
+```
 
 **Step 13 — Prompt to start execution:**
 

@@ -313,6 +313,53 @@
   }
   .btn-exec:hover { background: #3730a3; box-shadow: 0 0 20px rgba(67,56,202,0.5); }
   .btn-exec:disabled { opacity: 0.4; cursor: default; box-shadow: none; }
+  .btn-plan {
+    font-family: var(--sans); font-size: 11px; font-weight: 600;
+    padding: 5px 14px; border-radius: 6px; border: none;
+    background: var(--cyan); color: #ffffff;
+    cursor: pointer; white-space: nowrap; transition: all 0.2s;
+    box-shadow: 0 0 12px rgba(8,145,178,0.3);
+    letter-spacing: 0.1px;
+  }
+  .btn-plan:hover { background: #0e7490; box-shadow: 0 0 20px rgba(8,145,178,0.5); }
+  .btn-plan:disabled { opacity: 0.4; cursor: default; box-shadow: none; }
+  .story-row .btn-plan {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    opacity: 0; transition: opacity 0.15s; z-index: 2;
+  }
+  .story-row:hover .btn-plan { opacity: 1; }
+
+  /* ── Question Modal ── */
+  .q-progress { padding: 20px; text-align: center; color: var(--dim); }
+  .q-progress .q-spinner {
+    display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border);
+    border-top-color: var(--cyan); border-radius: 50%; animation: qSpin 0.8s linear infinite;
+    margin-right: 8px; vertical-align: middle;
+  }
+  @keyframes qSpin { to { transform: rotate(360deg); } }
+  .q-group { margin-bottom: 16px; }
+  .q-label { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 6px; }
+  .q-input {
+    width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px;
+    font-family: var(--sans); font-size: 13px; color: var(--text); background: var(--bg);
+    transition: border-color 0.2s; resize: vertical;
+  }
+  .q-input:focus { outline: none; border-color: var(--cyan); }
+  .q-choices { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+  .q-choice {
+    display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text2);
+    cursor: pointer; padding: 4px 0;
+  }
+  .q-choice input[type="radio"] { accent-color: var(--cyan); }
+  .btn-submit-answers {
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    padding: 8px 20px; border-radius: 6px; border: none;
+    background: var(--cyan); color: #ffffff;
+    cursor: pointer; transition: all 0.2s;
+    box-shadow: 0 0 12px rgba(8,145,178,0.2);
+  }
+  .btn-submit-answers:hover { background: #0e7490; box-shadow: 0 0 20px rgba(8,145,178,0.4); }
+  .btn-submit-answers:disabled { opacity: 0.4; cursor: default; box-shadow: none; }
 
   /* ── Spec Panel (overlay) ── */
   .spec-overlay {
@@ -704,6 +751,173 @@ function openSpecPanel(storyId, title) {
     .catch(() => { body.textContent = 'Ingen plan fundet. K\u00f8r /devsprint-plan ' + storyId + ' f\u00f8rst.'; });
 }
 
+/* ── Plan launch + question/answer flow ── */
+function launchPlan(storyId, title) {
+  const overlay = cel('div', 'spec-overlay');
+  const panel = cel('div', 'spec-panel');
+
+  const header = cel('div', 'spec-header');
+  header.appendChild(cel('span', 'spec-header-title', '#' + storyId + ' \u2014 ' + title));
+  const closeBtn = cel('button', 'spec-close', '\u2715');
+  closeBtn.onclick = function() { clearInterval(pollTimer); overlay.remove(); };
+  header.appendChild(closeBtn);
+  panel.appendChild(header);
+
+  const body = cel('div', 'spec-body');
+  body.innerHTML = '<div class="q-progress"><span class="q-spinner"></span>Starter analyse\u2026</div>';
+  panel.appendChild(body);
+
+  const footer = cel('div', 'spec-footer');
+  const cancelBtn = cel('button', 'btn-cancel', 'Luk');
+  cancelBtn.onclick = function() { clearInterval(pollTimer); overlay.remove(); };
+  footer.appendChild(cancelBtn);
+  panel.appendChild(footer);
+
+  overlay.appendChild(panel);
+  overlay.onclick = function(e) { if (e.target === overlay) { clearInterval(pollTimer); overlay.remove(); } };
+  document.body.appendChild(overlay);
+
+  // Launch the plan agent
+  fetch('/api/plan', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({storyId: storyId}) })
+    .catch(() => { body.innerHTML = '<div class="q-progress" style="color:var(--red)">Kunne ikke starte analyse.</div>'; });
+
+  // Poll for questions or completion
+  let answered = false;
+  var pollTimer = setInterval(function() {
+    // Check for questions
+    fetch('/api/questions/' + storyId)
+      .then(r => { if (!r.ok) throw new Error('none'); return r.json(); })
+      .then(qData => {
+        if (!answered) {
+          clearInterval(pollTimer);
+          showQuestions(body, footer, storyId, qData, function() {
+            // After answering, resume polling for more questions or completion
+            answered = false;
+            body.innerHTML = '<div class="q-progress"><span class="q-spinner"></span>Agenten forts\u00e6tter\u2026</div>';
+            // Remove submit button
+            var sub = footer.querySelector('.btn-submit-answers');
+            if (sub) sub.remove();
+            pollTimer = setInterval(pollCheck, 3000);
+          });
+        }
+      })
+      .catch(() => {});
+
+    // Check agent status — if idle, plan is done
+    fetch('/api/agent-status').then(r => r.json()).then(ag => {
+      if (!ag.active && body.querySelector('.q-progress')) {
+        // Agent finished — check if story is now planned
+        fetch('/api/task-map').then(r => r.json()).then(tm => {
+          const mapped = tm.mappings && tm.mappings.some(m => m.storyId === Number(storyId));
+          if (mapped) {
+            clearInterval(pollTimer);
+            body.innerHTML = '<div class="q-progress" style="color:var(--green)">\u2713 Analyse f\u00e6rdig \u2014 story er nu planlagt.</div>';
+            setTimeout(() => { overlay.remove(); location.reload(); }, 2000);
+          }
+        }).catch(() => {});
+      } else if (ag.active) {
+        // Update progress text
+        const stories = ag.active.stories || {};
+        const sInfo = stories[String(storyId)];
+        const step = sInfo ? sInfo.step : ag.active.step;
+        const detail = sInfo ? sInfo.detail : ag.active.detail;
+        const prog = body.querySelector('.q-progress');
+        if (prog && step) {
+          prog.innerHTML = '<span class="q-spinner"></span>' + escH(step) + (detail ? ' \u2014 ' + escH(detail) : '');
+        }
+      }
+    }).catch(() => {});
+  }, 3000);
+  // Alias for restarting poll after answer
+  var pollCheck = function() {
+    fetch('/api/questions/' + storyId)
+      .then(r => { if (!r.ok) throw new Error('none'); return r.json(); })
+      .then(qData => {
+        clearInterval(pollTimer);
+        showQuestions(body, footer, storyId, qData, function() {
+          answered = false;
+          body.innerHTML = '<div class="q-progress"><span class="q-spinner"></span>Agenten forts\u00e6tter\u2026</div>';
+          var sub = footer.querySelector('.btn-submit-answers');
+          if (sub) sub.remove();
+          pollTimer = setInterval(pollCheck, 3000);
+        });
+      })
+      .catch(() => {});
+    fetch('/api/agent-status').then(r => r.json()).then(ag => {
+      if (!ag.active) {
+        fetch('/api/task-map').then(r => r.json()).then(tm => {
+          const mapped = tm.mappings && tm.mappings.some(m => m.storyId === Number(storyId));
+          if (mapped) {
+            clearInterval(pollTimer);
+            body.innerHTML = '<div class="q-progress" style="color:var(--green)">\u2713 Analyse f\u00e6rdig.</div>';
+            setTimeout(() => { overlay.remove(); location.reload(); }, 2000);
+          }
+        }).catch(() => {});
+      }
+    }).catch(() => {});
+  };
+}
+
+function showQuestions(body, footer, storyId, qData, onAnswered) {
+  body.innerHTML = '';
+  const qs = qData.questions || [];
+  if (!qs.length) {
+    body.innerHTML = '<div class="q-progress">Ingen sp\u00f8rgsm\u00e5l fra agenten.</div>';
+    return;
+  }
+
+  qs.forEach(function(q) {
+    const group = cel('div', 'q-group');
+    group.appendChild(cel('div', 'q-label', q.text));
+
+    if (q.type === 'choice' && q.options && q.options.length) {
+      const choices = cel('div', 'q-choices');
+      q.options.forEach(function(opt) {
+        const label = cel('label', 'q-choice');
+        const radio = document.createElement('input');
+        radio.type = 'radio'; radio.name = 'q_' + q.id; radio.value = opt;
+        label.appendChild(radio);
+        label.appendChild(document.createTextNode(opt));
+        choices.appendChild(label);
+      });
+      group.appendChild(choices);
+    } else {
+      const input = document.createElement('textarea');
+      input.className = 'q-input';
+      input.rows = 2;
+      input.dataset.qid = q.id;
+      input.placeholder = 'Skriv dit svar\u2026';
+      group.appendChild(input);
+    }
+    body.appendChild(group);
+  });
+
+  // Add submit button to footer
+  var existing = footer.querySelector('.btn-submit-answers');
+  if (existing) existing.remove();
+  const submitBtn = cel('button', 'btn-submit-answers', 'Send svar');
+  submitBtn.onclick = function() {
+    submitBtn.disabled = true; submitBtn.textContent = 'Sender\u2026';
+    const answers = qs.map(function(q) {
+      if (q.type === 'choice') {
+        const checked = body.querySelector('input[name="q_' + q.id + '"]:checked');
+        return { id: q.id, answer: checked ? checked.value : '' };
+      } else {
+        const ta = body.querySelector('[data-qid="' + q.id + '"]');
+        return { id: q.id, answer: ta ? ta.value : '' };
+      }
+    });
+    fetch('/api/answers/' + storyId, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ storyId: Number(storyId), storyTitle: qData.storyTitle || '', answers: answers })
+    })
+    .then(r => r.json())
+    .then(() => { if (onAnswered) onAnswered(); })
+    .catch(() => { submitBtn.disabled = false; submitBtn.textContent = 'Send svar'; });
+  };
+  footer.appendChild(submitBtn);
+}
+
 /* ── Toggle helpers ── */
 function togDetail(el) {
   const d = el.nextElementSibling;
@@ -770,6 +984,14 @@ function buildStoryRow(s, ctx) {
   const titleCell = cel('div', 's-title-cell');
   titleCell.appendChild(cel('span', 's-title', s.title));
   const cls = classifyStory(s, ctx);
+  if (cls === 'unplanned') {
+    const planBtn = cel('button', 'btn-plan', 'Analys\u00e9r');
+    planBtn.onclick = function(e) {
+      e.stopPropagation();
+      launchPlan(s.id, s.title);
+    };
+    titleCell.appendChild(planBtn);
+  }
   if (cls === 'planned' || cls === 'partial') {
     const btn = cel('button', 'btn-exec', 'Udf\u00f8r plan');
     btn.onclick = function(e) {
