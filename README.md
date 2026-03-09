@@ -5,6 +5,17 @@ An Azure DevOps plugin for [Claude Code](https://docs.anthropic.com/en/docs/clau
 Point it at your sprint, and it will read your stories, analyze the relevant repos, write implementation plans, generate code, create PRs, and resolve tasks — all without leaving your terminal. Run `/devsprint-execute` and walk away. Come back to pull requests linked to your stories, tasks marked as resolved, and a summary of everything it did.
 Your sprint board stays in sync because the plugin updates it as it works.
 
+## What can it do?
+
+- **View your sprint** from the terminal — stories, tasks, state, descriptions, all color-coded
+- **Create stories and tasks** from natural language — just describe what you need
+- **Analyze stories** — reads the target repo, traces code paths, identifies the files that need changes, and writes a detailed implementation spec
+- **Execute stories autonomously** — creates a feature branch, writes the code, runs tests, commits, pushes, creates a PR linked to the story, and resolves all tasks
+- **Batch mode** — run `/devsprint-execute` with no arguments and it loops through every story in your sprint. Errors on one story don't block the next
+- **Fix PR comments** — `/devsprint-pr-fix <story-id>` fetches review comments, fixes them, and pushes
+
+Zero external dependencies. Just Node.js built-ins and the Azure DevOps REST API.
+
 ## What it looks like
 
 ### View your sprint board
@@ -145,17 +156,6 @@ Summary: 1 to execute, 1 already done, 1 skipped
      Story: Resolved ✓
      PR: https://dev.azure.com/.../pullrequest/894
 ```
-
-## What can it do?
-
-- **View your sprint** from the terminal — stories, tasks, state, descriptions, all color-coded
-- **Create stories and tasks** from natural language — just describe what you need
-- **Analyze stories** — reads the target repo, traces code paths, identifies the files that need changes, and writes a detailed implementation spec
-- **Execute stories autonomously** — creates a feature branch, writes the code, runs tests, commits, pushes, creates a PR linked to the story, and resolves all tasks
-- **Batch mode** — run `/devsprint-execute` with no arguments and it loops through every story in your sprint. Errors on one story don't block the next
-- **Fix PR comments** — `/devsprint-pr-fix <story-id>` fetches review comments, fixes them, and pushes
-
-Zero external dependencies. Just Node.js built-ins and the Azure DevOps REST API.
 
 ## Quick start
 
