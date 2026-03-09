@@ -46,7 +46,8 @@ devsprint-tools.cjs CLI contract used by this command:
 
 <important>
 - Do NOT output any thinking, planning, or narration text. No "Let me fetch...", "Now I'll render...", or similar messages.
-- After running the command, **always copy the full output into your text response** so the user sees it directly without expanding the tool result. The Bash tool output is often truncated or collapsed — the user must see the full sprint board without clicking anything.
+- Do NOT copy the output into your text response. The sprint board uses ANSI color codes that only render in the Bash tool output (user expands it with Ctrl+O). Copying strips the colors.
+- After the command, output only a single short line like: "Sprint board above — expand with Ctrl+O for full colored view."
 </important>
 
 <success_criteria>
