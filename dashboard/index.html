@@ -279,6 +279,64 @@
   .btn-exec:hover { background: var(--indigo); color: white; }
   .btn-exec:disabled { opacity: 0.5; cursor: default; background: var(--indigo-light); color: var(--indigo); }
 
+  /* ── Spec Panel (overlay) ── */
+  .spec-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200;
+    display: flex; justify-content: center; align-items: center;
+    animation: fadeIn 0.15s ease-out;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .spec-panel {
+    background: var(--white); border-radius: 12px; box-shadow: var(--shadow-lg);
+    width: 720px; max-height: 85vh; display: flex; flex-direction: column;
+    animation: slideUp 0.2s ease-out;
+  }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+  .spec-header {
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .spec-header-title { font-size: 14px; font-weight: 600; }
+  .spec-close {
+    background: none; border: none; font-size: 18px; color: var(--dim);
+    cursor: pointer; padding: 4px 8px; border-radius: 4px;
+  }
+  .spec-close:hover { background: #f0ede8; color: var(--text); }
+  .spec-body {
+    padding: 20px; overflow-y: auto; flex: 1;
+    font-size: 13px; line-height: 1.7; color: var(--text2);
+  }
+  .spec-body h1 { font-size: 16px; margin: 0 0 12px; color: var(--text); }
+  .spec-body h2 { font-size: 14px; margin: 20px 0 8px; color: var(--text); border-bottom: 1px solid var(--border-light); padding-bottom: 4px; }
+  .spec-body h3 { font-size: 12px; margin: 14px 0 6px; color: var(--text); }
+  .spec-body code { font-family: var(--mono); font-size: 11px; background: #f0ede8; padding: 1px 4px; border-radius: 3px; }
+  .spec-body pre { background: #f0ede8; padding: 10px 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
+  .spec-body pre code { background: none; padding: 0; }
+  .spec-body ul, .spec-body ol { padding-left: 20px; margin: 6px 0; }
+  .spec-body li { margin: 2px 0; }
+  .spec-body table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; }
+  .spec-body th, .spec-body td { padding: 4px 8px; border: 1px solid var(--border-light); text-align: left; }
+  .spec-body th { background: #f0ede8; font-weight: 600; }
+  .spec-body blockquote { border-left: 3px solid var(--indigo); padding: 4px 12px; margin: 8px 0; color: var(--dim); }
+  .spec-footer {
+    padding: 12px 20px; border-top: 1px solid var(--border);
+    display: flex; justify-content: flex-end; gap: 8px;
+  }
+  .btn-launch {
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    padding: 8px 20px; border-radius: 6px; border: none;
+    background: var(--indigo); color: white;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-launch:hover { background: #3730a3; }
+  .btn-launch:disabled { opacity: 0.5; cursor: default; }
+  .btn-cancel {
+    font-family: var(--mono); font-size: 11px; font-weight: 500;
+    padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--white); color: var(--text2); cursor: pointer;
+  }
+  .btn-cancel:hover { background: #f0ede8; }
+
   /* ── Status group header ── */
   .status-header {
     padding: 10px 16px; display: flex; align-items: center; gap: 8px;
@@ -524,6 +582,79 @@ function weekdayCutoff(n) {
   return d;
 }
 
+/* ── Spec Panel ── */
+function renderMarkdown(md) {
+  // Minimal markdown→HTML: headers, bold, code, lists, tables, blockquotes
+  let html = md
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+    .replace(/^- \[ \] (.+)$/gm, '<li>\u2610 $1</li>')
+    .replace(/^- \[x\] (.+)$/gm, '<li>\u2611 $1</li>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/^(\d+)\. (.+)$/gm, '<li>$1. $2</li>')
+    .replace(/(<li>.*<\/li>\n?)+/g, function(m) { return '<ul>' + m + '</ul>'; })
+    .replace(/\n{2,}/g, '<br><br>')
+    .replace(/\n/g, '<br>');
+  // Tables
+  html = html.replace(/(\|.+\|(<br>)?)+/g, function(block) {
+    const rows = block.split(/<br>/).filter(r => r.trim() && !r.match(/^\|[-|: ]+\|$/));
+    if (rows.length < 1) return block;
+    let t = '<table>';
+    rows.forEach((r, i) => {
+      const cells = r.split('|').filter(c => c.trim() !== '');
+      const tag = i === 0 ? 'th' : 'td';
+      t += '<tr>' + cells.map(c => '<' + tag + '>' + c.trim() + '</' + tag + '>').join('') + '</tr>';
+    });
+    return t + '</table>';
+  });
+  return html;
+}
+
+function openSpecPanel(storyId, title) {
+  const overlay = cel('div', 'spec-overlay');
+  const panel = cel('div', 'spec-panel');
+
+  const header = cel('div', 'spec-header');
+  header.appendChild(cel('span', 'spec-header-title', '#' + storyId + ' \u2014 ' + title));
+  const closeBtn = cel('button', 'spec-close', '\u2715');
+  closeBtn.onclick = function() { overlay.remove(); };
+  header.appendChild(closeBtn);
+  panel.appendChild(header);
+
+  const body = cel('div', 'spec-body');
+  body.textContent = 'Henter plan\u2026';
+  panel.appendChild(body);
+
+  const footer = cel('div', 'spec-footer');
+  const cancelBtn = cel('button', 'btn-cancel', 'Luk');
+  cancelBtn.onclick = function() { overlay.remove(); };
+  const launchBtn = cel('button', 'btn-launch', '\u25B6 Start execution');
+  launchBtn.disabled = true;
+  launchBtn.onclick = function() {
+    launchBtn.disabled = true; launchBtn.textContent = 'Starter\u2026';
+    fetch('/api/execute', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({storyId: storyId}) })
+      .then(r => r.json()).then(() => { launchBtn.textContent = 'Startet \u2713'; setTimeout(() => overlay.remove(), 1000); })
+      .catch(() => { launchBtn.disabled = false; launchBtn.textContent = '\u25B6 Start execution'; });
+  };
+  footer.appendChild(cancelBtn);
+  footer.appendChild(launchBtn);
+  panel.appendChild(footer);
+
+  overlay.appendChild(panel);
+  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+  document.body.appendChild(overlay);
+
+  fetch('/api/story-spec?id=' + storyId)
+    .then(r => { if (!r.ok) throw new Error('Not found'); return r.json(); })
+    .then(d => { body.innerHTML = renderMarkdown(d.markdown); launchBtn.disabled = false; })
+    .catch(() => { body.textContent = 'Ingen plan fundet. K\u00f8r /devsprint-plan ' + storyId + ' f\u00f8rst.'; });
+}
+
 /* ── Toggle helpers ── */
 function togDetail(el) {
   const d = el.nextElementSibling;
@@ -596,16 +727,13 @@ function buildStoryRow(s, ctx) {
   const repoName = sRM ? sRM[s.id] : null;
   if (repoName) row.appendChild(cel('span', 's-repo', repoName.replace(/^NewSettlement\./, '')));
 
-  // Execute button for planned/partial stories
+  // "Udfør plan" button for planned/partial stories
   const cls = classifyStory(s, ctx);
   if (cls === 'planned' || cls === 'partial') {
-    const btn = cel('button', 'btn-exec', '\u25B6 Execute');
+    const btn = cel('button', 'btn-exec', 'Udf\u00f8r plan');
     btn.onclick = function(e) {
       e.stopPropagation();
-      btn.disabled = true; btn.textContent = 'Starting\u2026';
-      fetch('/api/execute', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({storyId: s.id}) })
-        .then(r => r.json()).then(() => { btn.textContent = 'Launched'; })
-        .catch(() => { btn.disabled = false; btn.textContent = '\u25B6 Execute'; });
+      openSpecPanel(s.id, s.title);
     };
     row.appendChild(btn);
   }

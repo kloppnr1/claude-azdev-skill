@@ -341,6 +341,17 @@ async function handleRequest(req, res) {
         case '/api/pr-status':
           data = await fetchPRStatus();
           break;
+        case '/api/story-spec': {
+          const sid = new URL(req.url, 'http://localhost').searchParams.get('id');
+          if (!sid) { res.writeHead(400); res.end(JSON.stringify({ error: 'id required' })); return; }
+          const tm = getTaskMap();
+          const mapping = tm && tm.mappings ? tm.mappings.find(m => m.storyId === Number(sid)) : null;
+          if (!mapping || !mapping.repoPath) { res.writeHead(404); res.end(JSON.stringify({ error: 'Story not in task map' })); return; }
+          const specPath = path.join(mapping.repoPath, '.planning', 'stories', sid + '.md');
+          try { data = { markdown: fs.readFileSync(specPath, 'utf8'), repoPath: mapping.repoPath }; }
+          catch { res.writeHead(404); res.end(JSON.stringify({ error: 'Spec not found at ' + specPath })); return; }
+          break;
+        }
         case '/api/execute':
           if (req.method === 'POST') {
             let body = '';
