@@ -167,7 +167,7 @@
   /* ── Story Grid ── */
   .story-grid {
     display: grid;
-    grid-template-columns: 60px 1fr 90px 110px 68px;
+    grid-template-columns: 60px 68px 1fr 90px 110px;
     align-items: center;
   }
   .story-row {
@@ -945,7 +945,15 @@ function buildStoryRow(s, ctx) {
   // Col 1: ID
   row.appendChild(cel('span', 's-id', '#' + s.id));
 
-  // Col 2: Title + exec button in a cell wrapper
+  // Col 2: State badge
+  const sc = SC(s.state);
+  const stCls = s.state.toLowerCase() === 'closed' ? 'st-closed' : 'st-' + sc;
+  const stateEl = cel('span', 's-state');
+  const stateTag = cel('span', 's-state-tag ' + stCls, s.state);
+  stateEl.appendChild(stateTag);
+  row.appendChild(stateEl);
+
+  // Col 3: Title + exec button in a cell wrapper
   const titleCell = cel('div', 's-title-cell');
   titleCell.appendChild(cel('span', 's-title', s.title));
   const cls = classifyStory(s, ctx);
@@ -974,13 +982,13 @@ function buildStoryRow(s, ctx) {
   }
   row.appendChild(titleCell);
 
-  // Col 3: Indicators
+  // Col 4: Indicators
   const inds = cel('span', 's-indicators');
   inds.dataset.storyIndicators = s.id;
   fillIndicators(inds, s, ctx);
   row.appendChild(inds);
 
-  // Col 4: Repo badge
+  // Col 5: Repo badge
   const repoName = sRM ? sRM[s.id] : null;
   const repoEl = cel('span', 's-repo');
   if (repoName) {
@@ -988,14 +996,6 @@ function buildStoryRow(s, ctx) {
     repoEl.appendChild(tag);
   }
   row.appendChild(repoEl);
-
-  // Col 5: State badge
-  const sc = SC(s.state);
-  const stCls = s.state.toLowerCase() === 'closed' ? 'st-closed' : 'st-' + sc;
-  const stateEl = cel('span', 's-state');
-  const stateTag = cel('span', 's-state-tag ' + stCls, s.state);
-  stateEl.appendChild(stateTag);
-  row.appendChild(stateEl);
 
   // Click handler for expanding details
   if (hasDetail) {
