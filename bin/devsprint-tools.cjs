@@ -1109,7 +1109,8 @@ async function cmdGetChildStates(cwd, args) {
  * @param {Array} items - Work items array from get-sprint-items
  * @returns {string[]} Lines of ANSI-colored output
  */
-function renderSprintBoard(sprint, items) {
+function renderSprintBoard(sprint, items, options = {}) {
+  const detailed = options.detailed || false;
   const RESET = '\x1b[0m';
   const BOLD = '\x1b[1m';
   const DIM = '\x1b[2m';
@@ -1190,34 +1191,39 @@ function renderSprintBoard(sprint, items) {
     push(`${BOLD}${sc}┌─ [${abbrev}] #${story.id} — ${story.title}${RESET}`);
     push(`│  State: ${sc}${stateLabel(story.state)}${RESET}  │  Assigned: ${assigned}`);
 
-    // Description (first 3 lines) — items already have HTML stripped by get-sprint-items
-    const desc = story.description || '';
-    if (desc) {
-      const descLines = desc.split('\n').filter(l => l.trim()).slice(0, 3);
-      for (const dl of descLines) {
-        push(`│  ${DIM}${dl}${RESET}`);
+    if (detailed) {
+      // Description (first 3 lines) — items already have HTML stripped by get-sprint-items
+      const desc = story.description || '';
+      if (desc) {
+        const descLines = desc.split('\n').filter(l => l.trim()).slice(0, 3);
+        for (const dl of descLines) {
+          push(`│  ${DIM}${dl}${RESET}`);
+        }
+      } else {
+        push(`│  ${DIM}(no description)${RESET}`);
       }
-    } else {
-      push(`│  ${DIM}(no description)${RESET}`);
-    }
 
-    // Acceptance criteria
-    const ac = story.acceptanceCriteria || '';
-    if (ac) {
-      push('│');
-      push(`│  ${MAGENTA}Acceptance Criteria:${RESET}`);
-      const acLines = ac.split('\n').filter(l => l.trim());
-      for (const al of acLines) {
-        push(`│  ${DIM}${al}${RESET}`);
+      // Acceptance criteria
+      const ac = story.acceptanceCriteria || '';
+      if (ac) {
+        push('│');
+        push(`│  ${MAGENTA}Acceptance Criteria:${RESET}`);
+        const acLines = ac.split('\n').filter(l => l.trim());
+        for (const al of acLines) {
+          push(`│  ${DIM}${al}${RESET}`);
+        }
+      } else {
+        push('│');
+        push(`│  ${MAGENTA}Acceptance Criteria:${RESET}`);
+        push(`│  ${DIM}(no acceptance criteria)${RESET}`);
       }
-    } else {
-      push('│');
-      push(`│  ${MAGENTA}Acceptance Criteria:${RESET}`);
-      push(`│  ${DIM}(no acceptance criteria)${RESET}`);
     }
 
     // Child tasks
-    const children = childrenOf.get(story.id) || [];
+    const allChildren = childrenOf.get(story.id) || [];
+    const doneStatesSet = new Set(['Resolved', 'Closed', 'Done']);
+    const children = detailed ? allChildren : allChildren.filter(c => !doneStatesSet.has(c.state));
+    const hiddenCount = allChildren.length - children.length;
     if (children.length > 0) {
       push('│');
       for (const child of children) {
@@ -1225,6 +1231,9 @@ function renderSprintBoard(sprint, items) {
         const ca = child.assignedTo || 'Unassigned';
         push(`│   ${cc}■${RESET} #${child.id} — ${child.title}  [${cc}${stateLabel(child.state)}${RESET}]  ${ca}`);
       }
+    }
+    if (hiddenCount > 0) {
+      push(`│   ${DIM}+ ${hiddenCount} completed${RESET}`);
     }
 
     push('└──────');
@@ -1335,6 +1344,7 @@ async function cmdDeleteComment(cwd, args) {
 async function cmdShowSprint(cwd, args) {
   const mine = args && args.includes('--me');
   const showAll = args && args.includes('--all');
+  const detailed = args && args.includes('--detailed');
 
   try {
     const { cfg, encodedPat, teamName, iteration } = await getSprintData(cwd);
@@ -1363,7 +1373,7 @@ async function cmdShowSprint(cwd, args) {
     const ids = Array.from(idSet);
 
     if (ids.length === 0) {
-      const lines = renderSprintBoard(sprint, []);
+      const lines = renderSprintBoard(sprint, [], { detailed });
       process.stdout.write(lines.join('\n') + '\n');
       process.exit(0);
     }
@@ -1441,7 +1451,7 @@ async function cmdShowSprint(cwd, args) {
       });
     }
 
-    const lines = renderSprintBoard(sprint, items);
+    const lines = renderSprintBoard(sprint, items, { detailed });
     process.stdout.write(lines.join('\n') + '\n');
     process.exit(0);
   } catch (err) {

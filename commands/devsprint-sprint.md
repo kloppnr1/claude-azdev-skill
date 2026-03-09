@@ -1,7 +1,7 @@
 ---
 name: devsprint-sprint
 description: View current sprint backlog from Azure DevOps
-argument-hint: "[--all]"
+argument-hint: "[--all] [--detailed]"
 allowed-tools:
   - Bash
 ---
@@ -20,12 +20,12 @@ $CWD is the project directory where .planning/ lives.
 
 devsprint-tools.cjs CLI contract used by this command:
 
-  node ~/.claude/bin/devsprint-tools.cjs show-sprint [--me] [--all] --cwd $CWD
+  node ~/.claude/bin/devsprint-tools.cjs show-sprint [--me] [--all] [--detailed] --cwd $CWD
     -> Fetches sprint metadata, fetches work items, renders colored board to stdout
     -> --me: filter to items assigned to the authenticated user
-    -> --all: show ALL items including Resolved/Closed/Done (by default these are hidden)
-    -> Default (no --all): only shows stories that are NOT Resolved/Closed/Done
-    -> stdout: ANSI-colored sprint board (stories grouped with tasks, colored state indicators)
+    -> --all: show all stories + all tasks including resolved/closed/done
+    -> --detailed: show description, acceptance criteria, and all tasks (verbose view)
+    -> Default: compact view — no description/AC, hides completed tasks (shows "+ N completed" count), hides resolved/closed stories
     -> exit 0 on success
     -> exit 1 on error (stderr contains message — e.g., no config, no active sprint, auth failure)
 </context>
@@ -37,11 +37,14 @@ devsprint-tools.cjs CLI contract used by this command:
 
 2. **Run the show-sprint command:**
 
-   **Default (no argument):** Show only the user's own incomplete items:
+   **Default (no flags):** Compact view of the user's own incomplete items:
    Run: `node ~/.claude/bin/devsprint-tools.cjs show-sprint --me --cwd $CWD`
 
-   **If the user passed `--all`:** Show ALL items including completed:
+   **If the user passed `--all`:** Include resolved/closed stories and completed tasks:
    Run: `node ~/.claude/bin/devsprint-tools.cjs show-sprint --me --all --cwd $CWD`
+
+   **If the user passed `--detailed`:** Full verbose view with description and AC:
+   Run: `node ~/.claude/bin/devsprint-tools.cjs show-sprint --me --detailed --cwd $CWD`
 </process>
 
 <important>
@@ -54,7 +57,8 @@ devsprint-tools.cjs CLI contract used by this command:
 - Sprint board is displayed with a single command call
 - No intermediate steps, no JSON juggling, no dynamic script construction
 - No narration or thinking text — only the sprint board output
-- By default only incomplete stories are shown
-- --all flag shows everything including resolved/closed
+- Default is compact view (no description/AC, completed tasks hidden)
+- --all shows all stories and tasks including completed
+- --detailed shows full verbose view with description and AC
 - Errors produce clear, actionable messages from the helper script
 </success_criteria>
