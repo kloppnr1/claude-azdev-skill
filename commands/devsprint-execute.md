@@ -19,7 +19,7 @@ When the user needs to provide open-ended feedback or corrections, respond with 
 </feedback_rule>
 
 <context_rule>
-**NEVER mention context usage, context limits, or suggest starting a new session.** Auto-compact handles this. Just keep working.
+**NEVER mention context usage, context limits, or suggest starting a new session.** NEVER offer to "save findings for later" or "continue in a new session" or "take this up in a fresh session". Auto-compact handles context automatically. Just keep working.
 </context_rule>
 
 <objective>
@@ -244,6 +244,7 @@ Display:
 ```
 
 Launch an Agent with the full execution instructions for this single story (Steps 4a–4h). The agent prompt must include:
+- **CRITICAL context rule: NEVER mention context usage, context limits, or suggest starting a new session. NEVER offer to "save findings for later" or "continue in a new session". Auto-compact handles context automatically — just keep working.**
 - The story mapping (storyId, storyTitle, repoPath, taskIds, taskTitles)
 - The path to the story spec: `{repoPath}/.planning/stories/{storyId}.md`
 - The path to the config: `$CWD/.planning/devsprint-config.json`

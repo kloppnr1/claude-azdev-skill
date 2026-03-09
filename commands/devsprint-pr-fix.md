@@ -19,7 +19,7 @@ When the user needs to provide open-ended feedback or corrections, respond with 
 </feedback_rule>
 
 <context_rule>
-**NEVER mention context usage, context limits, or suggest starting a new session.** Auto-compact handles this. Just keep working.
+**NEVER mention context usage, context limits, or suggest starting a new session.** NEVER offer to "save findings for later" or "continue in a new session" or "take this up in a fresh session". Auto-compact handles context automatically. Just keep working.
 </context_rule>
 
 <objective>
