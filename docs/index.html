@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DevSprint - Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f0f1f5;
+    --bg2: #e8e9ef;
+    --white: #ffffff;
+    --card: #ffffff;
+    --border: #d4d6e0;
+    --border-light: #e2e4ec;
+    --text: #111318;
+    --text2: #3d4055;
+    --dim: #6b6f85;
+    --mute: #9ca0b4;
+    --indigo: #4338ca;
+    --indigo-light: rgba(67,56,202,0.07);
+    --green: #059669;
+    --green-light: rgba(5,150,105,0.08);
+    --red: #dc2626;
+    --red-light: rgba(220,38,38,0.07);
+    --amber: #d97706;
+    --amber-light: rgba(217,119,6,0.08);
+    --blue: #2563eb;
+    --blue-light: rgba(37,99,235,0.07);
+    --purple: #7c3aed;
+    --purple-light: rgba(124,58,237,0.07);
+    --cyan: #0891b2;
+    --cyan-light: rgba(8,145,178,0.07);
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Outfit', system-ui, sans-serif;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.1);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: var(--sans); background: var(--bg); color: var(--text);
+    font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+
+  /* Top Bar */
+  .topbar {
+    background: rgba(255,255,255,0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 28px; height: 52px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .topbar-l { display: flex; align-items: center; gap: 20px; }
+  .brand {
+    font-family: var(--mono); font-size: 14px; font-weight: 700;
+    letter-spacing: -0.5px; color: var(--indigo);
+  }
+  .sprint-info { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--dim); }
+  .sprint-info .name { color: var(--text2); font-weight: 600; }
+  .demo-badge {
+    font-family: var(--mono); font-size: 9px; font-weight: 700;
+    padding: 3px 10px; border-radius: 4px; letter-spacing: 0.5px;
+    background: var(--amber-light); color: var(--amber); text-transform: uppercase;
+  }
+  .btn-refresh {
+    background: transparent; border: 1px solid var(--border); color: var(--dim);
+    padding: 6px 16px; border-radius: 6px; cursor: pointer;
+    font-size: 11px; font-family: var(--mono); font-weight: 500;
+    transition: all 0.2s;
+  }
+  .btn-refresh:hover { border-color: var(--indigo); color: var(--indigo); background: var(--indigo-light); }
+
+  /* Shell */
+  .shell { max-width: 980px; margin: 0 auto; padding: 24px 28px 60px; }
+
+  /* Agent Banner */
+  .agent-banner {
+    background: var(--indigo-light); border: 1px solid rgba(67,56,202,0.2); border-radius: 10px;
+    margin-bottom: 20px; overflow: hidden;
+    animation: slideDown 0.3s ease-out;
+  }
+  @keyframes slideDown { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+  .ab-main { padding: 12px 16px; display: flex; align-items: center; gap: 10px; }
+  .ab-pulse {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--indigo);
+    box-shadow: 0 0 8px rgba(67,56,202,0.5);
+    animation: livePulse 2s ease-in-out infinite;
+  }
+  @keyframes livePulse { 0%,100%{box-shadow:0 0 8px rgba(67,56,202,0.4)} 50%{box-shadow:0 0 16px rgba(67,56,202,0.1)} }
+  .ab-label {
+    font-family: var(--mono); font-size: 10px; font-weight: 600;
+    color: var(--indigo); letter-spacing: 0.8px; text-transform: uppercase;
+  }
+  .ab-story { font-size: 13px; font-weight: 600; color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ab-story .id { color: var(--indigo); font-family: var(--mono); font-size: 12px; margin-right: 4px; }
+  .ab-time { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+  .ab-detail { padding: 0 16px 10px 34px; display: flex; align-items: center; gap: 8px; }
+  .ab-step {
+    font-family: var(--mono); font-size: 9px; font-weight: 600;
+    padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  .ab-desc { font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .ab-progress { padding: 0 16px 12px 34px; height: 3px; border-radius: 2px; background: var(--border); overflow: hidden; position: relative; }
+  .ab-progress .ab-ind { position: absolute; top: 0; left: 0; height: 100%; width: 30%; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--indigo), transparent); animation: abSlide 1.8s ease-in-out infinite; }
+  @keyframes abSlide { 0% { left: -30%; } 100% { left: 100%; } }
+  .ab-stories { padding: 0 16px 8px 34px; display: flex; flex-direction: column; gap: 3px; }
+
+  .st-load { background: rgba(107,114,128,0.15); color: #4b5563; }
+  .st-analyze { background: rgba(6,182,212,0.18); color: #0e7490; }
+  .st-spec { background: rgba(245,158,11,0.18); color: #b45309; }
+  .st-devops { background: rgba(59,130,246,0.18); color: #1d4ed8; }
+  .st-done { background: rgba(34,197,94,0.18); color: #15803d; }
+  .st-test { background: rgba(249,115,22,0.18); color: #c2410c; }
+  .st-work { background: rgba(139,92,246,0.18); color: #6d28d9; }
+  .st-error { background: rgba(239,68,68,0.18); color: #b91c1c; }
+  .story-row.story-live > :first-child { box-shadow: inset 3px 0 0 var(--indigo); }
+
+  /* Stats */
+  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 24px; }
+  .stat {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 18px; box-shadow: var(--shadow);
+    transition: border-color 0.2s;
+  }
+  .stat:hover { border-color: var(--mute); }
+  .stat-label {
+    font-size: 11px; color: var(--dim); font-weight: 500; margin-bottom: 4px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .stat-val { font-family: var(--mono); font-size: 28px; font-weight: 700; line-height: 1.1; }
+
+  /* Repo Card */
+  .repo-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    margin-bottom: 12px; overflow: hidden; box-shadow: var(--shadow);
+    transition: border-color 0.2s;
+  }
+  .repo-card:hover { border-color: var(--mute); }
+  .repo-header {
+    padding: 10px 16px; display: flex; align-items: center; gap: 10px;
+    background: var(--bg2); border-bottom: 1px solid var(--border);
+  }
+  .repo-icon { font-size: 14px; opacity: 0.5; }
+  .repo-name {
+    font-family: var(--mono); font-size: 12px; font-weight: 600;
+    color: var(--text); flex: 1;
+  }
+  .repo-badges { display: flex; gap: 4px; }
+  .badge {
+    font-family: var(--mono); font-size: 9px; font-weight: 600;
+    padding: 2px 7px; border-radius: 4px; letter-spacing: 0.2px;
+  }
+  .badge-count { background: var(--indigo-light); color: var(--indigo); }
+  .badge-branch { background: var(--purple-light); color: var(--purple); }
+  .badge-dirty { background: var(--amber-light); color: var(--amber); }
+
+  /* Story Grid */
+  .story-grid {
+    display: grid;
+    grid-template-columns: 60px 68px 1fr 90px 110px;
+    align-items: center;
+  }
+  .story-row {
+    display: contents;
+    cursor: pointer;
+  }
+  .story-row > * {
+    padding: 10px 5px;
+    border-bottom: 1px solid var(--border-light);
+    transition: background 0.1s;
+    display: flex; align-items: center; align-self: stretch;
+  }
+  .story-row > :first-child { padding-left: 16px; }
+  .story-row > :last-child { padding-right: 16px; }
+  .story-row:hover > * { background: rgba(0,0,0,0.02); }
+  .story-row .btn-exec {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    opacity: 0; transition: opacity 0.15s; z-index: 2;
+  }
+  .story-row:hover .btn-exec { opacity: 1; }
+  .s-title-cell {
+    position: relative; display: flex; align-items: center; min-width: 0;
+  }
+  .s-id {
+    font-family: var(--mono); font-size: 10px; color: var(--mute);
+  }
+  .s-title {
+    font-size: 13px; font-weight: 400; color: var(--text2);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .story-row:hover .s-title { color: var(--text); }
+  .s-indicators { display: flex; align-items: center; gap: 4px; justify-content: flex-end; }
+  .ind {
+    font-family: var(--mono); font-size: 8px; font-weight: 600;
+    padding: 2px 6px; border-radius: 3px; letter-spacing: 0.3px;
+    text-transform: uppercase; white-space: nowrap;
+  }
+  .ind-live { background: var(--indigo-light); color: var(--indigo); }
+  .ind-planned { background: var(--purple-light); color: var(--purple); }
+  .ind-pr-active { background: var(--blue); color: #fff; }
+  .ind-pr-merged { background: var(--green-light); color: var(--green); }
+  .ind-pr-rejected { background: var(--red-light); color: var(--red); }
+  .ind-done { background: var(--green-light); color: var(--green); }
+  .ind-partial { background: var(--amber-light); color: var(--amber); }
+  .s-state {
+    font-family: var(--mono); font-size: 9px; font-weight: 600;
+    white-space: nowrap; text-align: right;
+  }
+  .s-state-tag {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+  }
+  .st-new { background: var(--cyan-light); color: var(--cyan); }
+  .st-active { background: var(--blue-light); color: var(--blue); }
+  .st-resolved { background: var(--green-light); color: var(--green); }
+  .st-closed { background: var(--green-light); color: var(--green); }
+  .st-removed { background: var(--red-light); color: var(--red); }
+
+  /* Story Detail */
+  .story-detail {
+    grid-column: 1 / -1;
+    padding: 10px 16px 12px 16px; background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+  }
+  .detail-sec { margin-bottom: 8px; }
+  .detail-sec:last-child { margin-bottom: 0; }
+  .detail-label {
+    font-family: var(--mono); font-size: 9px; font-weight: 600;
+    color: var(--mute); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 2px;
+  }
+  .detail-row {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--text2); padding: 2px 0;
+  }
+  .d-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+  .d-dot-green { background: var(--green); box-shadow: 0 0 6px rgba(52,211,153,0.4); }
+  .d-dot-amber { background: var(--amber); box-shadow: 0 0 6px rgba(251,191,36,0.4); }
+  .d-dot-live { background: var(--indigo); box-shadow: 0 0 6px rgba(67,56,202,0.5); animation: livePulse 2s ease-in-out infinite; }
+  .detail-row .txt { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text2); }
+  .detail-row .ts { font-family: var(--mono); font-size: 10px; color: var(--mute); flex-shrink: 0; }
+  .commit-line { display: flex; align-items: baseline; gap: 6px; font-size: 11px; padding: 2px 0; }
+  .c-hash { font-family: var(--mono); font-size: 10px; color: var(--indigo); flex-shrink: 0; opacity: 0.7; }
+  .c-msg { color: var(--text2); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .c-date { font-family: var(--mono); font-size: 10px; color: var(--mute); flex-shrink: 0; }
+  .pr-line { display: flex; align-items: center; gap: 6px; font-size: 11px; padding: 2px 0; }
+  .pr-icon {
+    width: 18px; height: 18px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; flex-shrink: 0; font-weight: 600;
+  }
+  .pri-active { background: var(--blue-light); color: var(--blue); }
+  .pri-merged { background: var(--green-light); color: var(--green); }
+  .pri-rejected { background: var(--red-light); color: var(--red); }
+  .pr-line a { color: var(--blue); text-decoration: none; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pr-line a:hover { text-decoration: underline; color: var(--indigo); }
+  .votes { display: flex; gap: 2px; flex-shrink: 0; }
+  .vote {
+    width: 16px; height: 16px; border-radius: 50%; font-size: 9px;
+    display: flex; align-items: center; justify-content: center; font-weight: 700;
+  }
+  .v-yes { background: var(--green-light); color: var(--green); }
+  .v-no { background: var(--red-light); color: var(--red); }
+  .v-wait { background: var(--amber-light); color: var(--amber); }
+  .v-none { background: var(--border); color: var(--mute); }
+
+  /* History runs */
+  .hist-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 8px; border-radius: 5px;
+    transition: background 0.12s;
+  }
+  .hist-row:hover { background: rgba(0,0,0,0.03); }
+  .hist-type {
+    font-family: var(--mono); font-size: 9px; font-weight: 700; padding: 2px 7px;
+    border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px;
+    line-height: 1; flex-shrink: 0;
+  }
+  .hist-type.ht-plan { background: #0e7490; color: #fff; }
+  .hist-type.ht-exec { background: #6d28d9; color: #fff; }
+  .hist-type.ht-prfix { background: var(--blue); color: #fff; }
+  .hist-ts {
+    font-family: var(--mono); font-size: 10px; color: var(--dim); font-weight: 500;
+    font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0;
+  }
+  .hist-bar {
+    width: 60px; height: 5px; border-radius: 3px; background: var(--border-light);
+    overflow: hidden; flex-shrink: 0;
+  }
+  .hist-bar-fill { height: 100%; border-radius: 3px; }
+  .hist-bar-fill.hb-ok { background: var(--green); }
+  .hist-bar-fill.hb-err { background: var(--red); }
+  .hist-bar-fill.hb-warn { background: var(--amber); }
+  .hist-result {
+    font-family: var(--mono); font-size: 9px; font-weight: 600; padding: 2px 7px;
+    border-radius: 3px; text-transform: uppercase; letter-spacing: 0.3px; flex-shrink: 0;
+  }
+  .hist-result.hr-ok { background: rgba(34,197,94,0.15); color: #15803d; }
+  .hist-result.hr-err { background: rgba(239,68,68,0.15); color: #b91c1c; }
+  .hist-result.hr-warn { background: rgba(217,119,6,0.12); color: #b45309; }
+  .hist-laststep {
+    font-family: var(--mono); font-size: 9px; color: var(--mute);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;
+    flex-shrink: 1;
+  }
+  .hist-spacer { flex: 1; min-width: 8px; }
+  .hist-row.hist-live {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 10px; margin-bottom: 4px; flex-wrap: wrap;
+    box-shadow: 0 2px 10px rgba(67,56,202,0.10);
+  }
+  .hist-track {
+    display: flex; align-items: stretch; gap: 1px;
+    height: 28px; border-radius: 4px; overflow: hidden;
+    width: 100%; margin-top: 6px;
+  }
+  .hist-seg {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 8px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.3px;
+    white-space: nowrap; overflow: hidden; min-width: 0;
+    padding: 0 6px;
+  }
+  .hist-seg span { overflow: hidden; text-overflow: ellipsis; }
+  .hist-seg.hp-prev { opacity: 0.45; }
+  .hist-seg.hp-current { flex: 1.8; font-size: 9px; font-weight: 800; }
+  .hist-seg.st-load { background: #d1d5db; color: #374151; }
+  .hist-seg.st-analyze { background: #67e8f9; color: #0e4f5c; }
+  .hist-seg.st-spec { background: #fcd34d; color: #713f12; }
+  .hist-seg.st-devops { background: #93c5fd; color: #1e3a5f; }
+  .hist-seg.st-done { background: #6ee7b7; color: #064e3b; }
+  .hist-seg.st-test { background: #fdba74; color: #6c2e0a; }
+  .hist-seg.st-work { background: #c4b5fd; color: #3b1a80; }
+  .hist-seg.st-error { background: #fca5a5; color: #7f1d1d; }
+  @keyframes liveGlow { 0%,100% { box-shadow: 0 2px 10px rgba(67,56,202,0.10); } 50% { box-shadow: 0 2px 16px rgba(67,56,202,0.22); } }
+  .hist-row.hist-live { animation: liveGlow 2.5s ease-in-out infinite; }
+  @keyframes liveSeg { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+  .hist-row.hist-live .hist-seg.hp-current { animation: liveSeg 2s ease-in-out infinite; }
+
+  /* Repo badge on story row */
+  .s-repo {
+    font-family: var(--mono); font-size: 8px; font-weight: 600;
+    letter-spacing: 0.2px; white-space: nowrap;
+  }
+  .s-repo-tag {
+    display: inline-block; padding: 2px 8px; border-radius: 3px;
+    background: rgba(107,114,128,0.10); color: #6b6f85;
+  }
+  .btn-exec {
+    font-family: var(--sans); font-size: 11px; font-weight: 600;
+    padding: 5px 14px; border-radius: 6px; border: none;
+    background: var(--indigo); color: #ffffff;
+    cursor: pointer; white-space: nowrap; transition: all 0.2s;
+    box-shadow: 0 0 12px rgba(67,56,202,0.3);
+    letter-spacing: 0.1px;
+  }
+  .btn-exec:hover { background: #3730a3; box-shadow: 0 0 20px rgba(67,56,202,0.5); }
+  .btn-plan {
+    font-family: var(--sans); font-size: 11px; font-weight: 600;
+    padding: 5px 14px; border-radius: 6px; border: none;
+    background: var(--cyan); color: #ffffff;
+    cursor: pointer; white-space: nowrap; transition: all 0.2s;
+    box-shadow: 0 0 12px rgba(8,145,178,0.3);
+    letter-spacing: 0.1px;
+  }
+  .btn-plan:hover { background: #0e7490; box-shadow: 0 0 20px rgba(8,145,178,0.5); }
+  .btn-prfix {
+    font-family: var(--sans); font-size: 11px; font-weight: 600;
+    padding: 4px 12px; border-radius: 6px; border: 1px solid var(--blue);
+    background: transparent; color: var(--blue);
+    cursor: pointer; white-space: nowrap; transition: all 0.15s;
+    margin-left: 4px; flex-shrink: 0;
+  }
+  .btn-prfix:hover { background: var(--blue); color: #fff; }
+  .story-row .btn-plan {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    opacity: 0; transition: opacity 0.15s; z-index: 2;
+  }
+  .story-row:hover .btn-plan { opacity: 1; }
+
+  /* Status group header */
+  .status-header {
+    padding: 10px 16px; display: flex; align-items: center; gap: 8px;
+    background: var(--bg2); border-bottom: 1px solid var(--border);
+  }
+  .status-icon { font-size: 12px; opacity: 0.6; }
+  .status-label {
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    color: var(--text); flex: 1; letter-spacing: 0.5px; text-transform: uppercase;
+  }
+  .status-count {
+    font-family: var(--mono); font-size: 9px; font-weight: 700;
+    padding: 2px 8px; border-radius: 10px; letter-spacing: 0.2px;
+  }
+  .sg-active .status-label { color: var(--blue); }
+  .sg-active .status-count { background: var(--blue-light); color: var(--blue); }
+  .sg-planned .status-label { color: var(--cyan); }
+  .sg-planned .status-count { background: var(--cyan-light); color: var(--cyan); }
+  .sg-blocked .status-label { color: var(--red); }
+  .sg-blocked .status-count { background: var(--red-light); color: var(--red); }
+  .sg-review .status-label { color: var(--purple); }
+  .sg-review .status-count { background: var(--purple-light); color: var(--purple); }
+  .sg-partial .status-label { color: var(--amber); }
+  .sg-partial .status-count { background: var(--amber-light); color: var(--amber); }
+  .sg-unplanned .status-label { color: var(--dim); }
+  .sg-unplanned .status-count { background: var(--border); color: var(--dim); }
+  .sg-done .status-label { color: var(--green); }
+  .sg-done .status-count { background: var(--green-light); color: var(--green); }
+
+  /* Daily Feed */
+  .daily-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    margin-top: 24px; overflow: hidden; box-shadow: var(--shadow);
+  }
+  .daily-header {
+    padding: 10px 16px; background: var(--bg2); border-bottom: 1px solid var(--border);
+    font-size: 11px; font-weight: 600; color: var(--dim);
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .day-group { border-bottom: 1px solid var(--border-light); }
+  .day-group:last-child { border-bottom: none; }
+  .day-date {
+    padding: 8px 16px 2px; font-family: var(--mono); font-size: 11px;
+    font-weight: 600; color: var(--text2);
+  }
+  .day-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 3px 16px; font-size: 11px; color: var(--text2);
+  }
+  .day-item:last-child { padding-bottom: 8px; }
+  .day-tag {
+    font-family: var(--mono); font-size: 8px; font-weight: 600;
+    padding: 2px 6px; border-radius: 3px; text-transform: uppercase;
+    letter-spacing: 0.3px; min-width: 44px; text-align: center; flex-shrink: 0;
+  }
+  .tag-commit { background: var(--blue-light); color: var(--blue); }
+  .tag-pr { background: var(--purple-light); color: var(--purple); }
+  .tag-exec { background: var(--green-light); color: var(--green); }
+  .tag-story { background: var(--amber-light); color: var(--amber); }
+  .tag-task { background: var(--cyan-light); color: var(--cyan); }
+  .day-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: #1e293b; color: #f8fafc; font-family: var(--mono); font-size: 12px;
+    padding: 10px 24px; border-radius: 8px; z-index: 999;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+    animation: toastIn 0.25s ease-out, toastOut 0.3s 2s ease-in forwards;
+  }
+  @keyframes toastIn { from { opacity:0; transform:translateX(-50%) translateY(10px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+  @keyframes toastOut { from { opacity:1; } to { opacity:0; } }
+
+  /* Entrance */
+  @keyframes cardIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .repo-card { animation: cardIn 0.3s ease-out both; }
+  .repo-card:nth-child(2) { animation-delay: 50ms; }
+  .repo-card:nth-child(3) { animation-delay: 100ms; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--mute); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-l">
+    <span class="brand">DevSprint</span>
+    <div class="sprint-info">
+      <span class="name">Sprint 12 - 2025</span>
+      <span>Jun 2 - Jun 13</span>
+    </div>
+    <span class="demo-badge">Demo</span>
+  </div>
+  <button class="btn-refresh" onclick="demoToast()">Refresh</button>
+</div>
+
+<div class="shell">
+  <!-- Agent Banner - Active -->
+  <div class="agent-banner" id="agent-banner">
+    <div class="ab-main">
+      <div class="ab-pulse"></div>
+      <span class="ab-label">ACTIVE</span>
+      <span class="ab-story"><span class="id">#4521</span>Add Stripe webhook handler for subscription renewals</span>
+      <span class="ab-time">12m ago</span>
+    </div>
+    <div id="ab-extra">
+      <div class="ab-detail">
+        <span class="ab-step st-work">Implement</span>
+        <span class="ab-desc">Writing StripeWebhookController.cs - handling subscription.renewed event</span>
+      </div>
+      <div class="ab-progress"><div class="ab-ind"></div></div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Stories</div><div class="stat-val" style="color:var(--indigo)">10</div></div>
+    <div class="stat"><div class="stat-label">Done</div><div class="stat-val" style="color:var(--green)">2</div></div>
+    <div class="stat"><div class="stat-label">Active PRs</div><div class="stat-val" style="color:var(--blue)">2</div></div>
+    <div class="stat"><div class="stat-label">Repos</div><div class="stat-val" style="color:var(--purple)">3</div></div>
+    <div class="stat"><div class="stat-label">Commits</div><div class="stat-val" style="color:var(--cyan)">27</div></div>
+  </div>
+
+  <!-- Main Content -->
+  <div id="main">
+
+    <!-- === acme-api === -->
+    <div class="repo-card">
+      <div class="repo-header">
+        <span class="repo-icon">&#128230;</span>
+        <span class="repo-name">acme-api</span>
+        <div class="repo-badges">
+          <span class="badge badge-count">5 stories</span>
+          <span class="badge badge-branch">feature/4521</span>
+        </div>
+      </div>
+      <div class="story-grid">
+        <!-- Status: Active -->
+        <div class="status-header sg-active" style="grid-column:1/-1">
+          <span class="status-icon">&#9654;</span>
+          <span class="status-label">Active</span>
+          <span class="status-count">1</span>
+        </div>
+        <div class="story-row story-live" onclick="toggleDetail(this)">
+          <div class="s-id">#4521</div>
+          <div class="s-repo"><span class="s-repo-tag">acme-api</span></div>
+          <div class="s-title-cell"><span class="s-title">Add Stripe webhook handler for subscription renewals</span><button class="btn-exec" onclick="demoToast(event)">Execute</button></div>
+          <div class="s-indicators"><span class="ind ind-live">Live</span></div>
+          <div class="s-state"><span class="s-state-tag st-active">Active</span></div>
+        </div>
+        <div class="story-detail" id="detail-4521" style="display:none">
+          <div class="detail-sec">
+            <div class="detail-label">Execution</div>
+            <div class="hist-row hist-live">
+              <span class="hist-type ht-exec">Exec</span>
+              <span class="hist-ts">Today 09:47</span>
+              <span class="hist-spacer"></span>
+              <div class="hist-track">
+                <div class="hist-seg st-load hp-prev"><span>Pre-flight</span></div>
+                <div class="hist-seg st-analyze hp-prev"><span>Analyze</span></div>
+                <div class="hist-seg st-test hp-prev"><span>Baseline</span></div>
+                <div class="hist-seg st-devops hp-prev"><span>Branch</span></div>
+                <div class="hist-seg st-analyze hp-prev"><span>Activate</span></div>
+                <div class="hist-seg st-test hp-prev"><span>Tests</span></div>
+                <div class="hist-seg st-work hp-current"><span>Implement</span></div>
+                <div class="hist-seg st-test"><span>Test</span></div>
+                <div class="hist-seg st-devops"><span>Commit</span></div>
+                <div class="hist-seg st-devops"><span>PR</span></div>
+                <div class="hist-seg st-done"><span>Resolve</span></div>
+                <div class="hist-seg st-done"><span>Done</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="detail-sec">
+            <div class="detail-label">Step Log</div>
+            <div class="detail-row"><div class="d-dot d-dot-green"></div><span class="txt">Pre-flight checks passed</span><span class="ts">09:47</span></div>
+            <div class="detail-row"><div class="d-dot d-dot-green"></div><span class="txt">Analyzing story requirements and codebase</span><span class="ts">09:48</span></div>
+            <div class="detail-row"><div class="d-dot d-dot-green"></div><span class="txt">Baseline tests: 142 passed, 0 failed</span><span class="ts">09:50</span></div>
+            <div class="detail-row"><div class="d-dot d-dot-green"></div><span class="txt">Created branch feature/4521-stripe-webhook</span><span class="ts">09:51</span></div>
+            <div class="detail-row"><div class="d-dot d-dot-green"></div><span class="txt">Writing test: StripeWebhookTests.cs</span><span class="ts">09:53</span></div>
+            <div class="detail-row"><div class="d-dot d-dot-live"></div><span class="txt">Implementing StripeWebhookController.cs</span><span class="ts">09:55</span></div>
+          </div>
+        </div>
+
+        <!-- Status: Awaiting verification -->
+        <div class="status-header sg-review" style="grid-column:1/-1">
+          <span class="status-icon">&#128269;</span>
+          <span class="status-label">Awaiting verification</span>
+          <span class="status-count">1</span>
+        </div>
+        <div class="story-row" onclick="toggleDetail(this)">
+          <div class="s-id">#4518</div>
+          <div class="s-repo"><span class="s-repo-tag">acme-api</span></div>
+          <div class="s-title-cell"><span class="s-title">Fix cart total calculation with discount codes</span></div>
+          <div class="s-indicators"><span class="ind ind-pr-active">PR Active</span></div>
+          <div class="s-state"><span class="s-state-tag st-resolved">Resolved</span></div>
+        </div>
+        <div class="story-detail" id="detail-4518" style="display:none">
+          <div class="detail-sec">
+            <div class="detail-label">Pull Requests</div>
+            <div class="pr-line">
+              <div class="pr-icon pri-active">&#8593;</div>
+              <a href="#" onclick="demoToast(event)">Fix discount code stacking and percentage rounding</a>
+              <div class="votes"><span class="vote v-wait">?</span><span class="vote v-yes">&#10003;</span></div>
+              <button class="btn-prfix" onclick="demoToast(event)">PR Fix</button>
+            </div>
+          </div>
+          <div class="detail-sec">
+            <div class="detail-label">Recent Commits</div>
+            <div class="commit-line"><span class="c-hash">a3f9c21</span><span class="c-msg">fix: handle percentage discount rounding to 2 decimals</span><span class="c-date">Jun 5</span></div>
+            <div class="commit-line"><span class="c-hash">b7e2d44</span><span class="c-msg">fix: prevent stacking of single-use discount codes</span><span class="c-date">Jun 5</span></div>
+            <div class="commit-line"><span class="c-hash">c1a8f90</span><span class="c-msg">test: add cart discount edge case tests</span><span class="c-date">Jun 5</span></div>
+          </div>
+          <div class="detail-sec">
+            <div class="detail-label">History</div>
+            <div class="hist-row">
+              <span class="hist-type ht-exec">Exec</span>
+              <span class="hist-ts">Jun 5 14:22</span>
+              <div class="hist-bar"><div class="hist-bar-fill hb-ok" style="width:100%"></div></div>
+              <span class="hist-result hr-ok">Done</span>
+              <span class="hist-laststep">PR Created</span>
+            </div>
+            <div class="hist-row">
+              <span class="hist-type ht-plan">Plan</span>
+              <span class="hist-ts">Jun 5 13:40</span>
+              <div class="hist-bar"><div class="hist-bar-fill hb-ok" style="width:100%"></div></div>
+              <span class="hist-result hr-ok">Done</span>
+              <span class="hist-laststep">Spec ready</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Status: Planned -->
+        <div class="status-header sg-planned" style="grid-column:1/-1">
+          <span class="status-icon">&#128203;</span>
+          <span class="status-label">Planned</span>
+          <span class="status-count">2</span>
+        </div>
+        <div class="story-row" onclick="toggleDetail(this)">
+          <div class="s-id">#4530</div>
+          <div class="s-repo"><span class="s-repo-tag">acme-api</span></div>
+          <div class="s-title-cell"><span class="s-title">Migrate user sessions from Redis to DynamoDB</span><button class="btn-exec" onclick="demoToast(event)">Execute</button></div>
+          <div class="s-indicators"><span class="ind ind-planned">Planned</span></div>
+          <div class="s-state"><span class="s-state-tag st-active">Active</span></div>
+        </div>
+        <div class="story-detail" id="detail-4530" style="display:none">
+          <div class="detail-sec">
+            <div class="detail-label">History</div>
+            <div class="hist-row">
+              <span class="hist-type ht-plan">Plan</span>
+              <span class="hist-ts">Jun 4 16:10</span>
+              <div class="hist-bar"><div class="hist-bar-fill hb-ok" style="width:100%"></div></div>
+              <span class="hist-result hr-ok">Done</span>
+              <span class="hist-laststep">Spec ready</span>
+            </div>
+          </div>
+        </div>
+        <div class="story-row" onclick="toggleDetail(this)">
+          <div class="s-id">#4531</div>
+          <div class="s-repo"><span class="s-repo-tag">acme-api</span></div>
+          <div class="s-title-cell"><span class="s-title">Add rate limiting to public API endpoints</span><button class="btn-exec" onclick="demoToast(event)">Execute</button></div>
+          <div class="s-indicators"><span class="ind ind-planned">Planned</span></div>
+          <div class="s-state"><span class="s-state-tag st-active">Active</span></div>
+        </div>
+        <div class="story-detail" id="detail-4531" style="display:none">
+          <div class="detail-sec">
+            <div class="detail-label">History</div>
+            <div class="hist-row">
+              <span class="hist-type ht-plan">Plan</span>
+              <span class="hist-ts">Jun 4 16:35</span>
+              <div class="hist-bar"><div class="hist-bar-fill hb-ok" style="width:100%"></div></div>
+              <span class="hist-result hr-ok">Done</span>
+              <span class="hist-laststep">Spec ready</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Status: Blocked -->
+        <div class="status-header sg-blocked" style="grid-column:1/-1">
+          <span class="status-icon">&#9940;</span>
+          <span class="status-label">Blocked</span>
+          <span class="status-count">1</span>
+        </div>
+        <div class="story-row">
+          <div class="s-id">#4535</div>
+          <div class="s-repo"><span class="s-repo-tag">acme-api</span></div>
+          <div class="s-title-cell"><span class="s-title">BLOCKED: Waiting for Stripe sandbox access</span></div>
+          <div class="s-indicators"></div>
+          <div class="s-state"><span class="s-state-tag st-new">New</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- === acme-frontend === -->
+    <div class="repo-card">
+      <div class="repo-header">
+        <span class="repo-icon">&#128230;</span>
+        <span class="repo-name">acme-frontend</span>
+        <div class="repo-badges">
+          <span class="badge badge-count">3 stories</span>
+          <span class="badge badge-branch">feature/4519</span>
+          <span class="badge badge-dirty">1 dirty</span>
+        </div>
+      </div>
+      <div class="story-grid">
+        <!-- Status: Awaiting verification -->
+        <div class="status-header sg-review" style="grid-column:1/-1">
+          <span class="status-icon">&#128269;</span>
+          <span class="status-label">Awaiting verification</span>
+          <span class="status-count">1</span>
+        </div>
+        <div class="story-row" onclick="toggleDetail(this)">
+          <div class="s-id">#4519</div>
+          <div class="s-repo"><span class="s-repo-tag">acme-frontend</span></div>
+          <div class="s-title-cell"><span class="s-title">Implement product search with Elasticsearch</span></div>
+          <div class="s-indicators"><span class="ind ind-pr-merged">Merged</span></div>
+          <div class="s-state"><span class="s-state-tag st-resolved">Resolved</span></div>
+        </div>
+        <div class="story-detail" id="detail-4519" style="display:none">
+          <div class="detail-sec">
+            <div class="detail-label">Pull Requests</div>
+            <div class="pr-line">
+              <div class="pr-icon pri-merged">&#10003;</div>
+              <a href="#" onclick="demoToast(event)">feat: add Elasticsearch-powered product search with autocomplete</a>
+              <div class="votes"><span class="vote v-yes">&#10003;</span><span class="vote v-yes">&#10003;</span></div>
+            </div>
+          </div>
+          <div class="detail-sec">
+            <div class="detail-label">Recent Commits</div>
+            <div class="commit-line"><span class="c-hash">d4e5f67</span><span class="c-msg">feat: add SearchBar component with debounced ES queries</span><span class="c-date">Jun 4</span></div>
+            <div class="commit-line"><span class="c-hash">e8a1b23</span><span class="c-msg">feat: add search results page with highlighting</span><span class="c-date">Jun 4</span></div>
+            <div class="commit-line"><span class="c-hash">f2c3d45</span><span class="c-msg">test: add SearchBar and results integration tests</span><span class="c-date">Jun 4</span></div>
+          </div>
+          <div class="detail-sec">
+            <div class="detail-label">History</div>
+            <div class="hist-row">
+              <span class="hist-type ht-exec">Exec</span>
+              <span class="hist-ts">Jun 4 10:15</span>
+              <div class="hist-bar"><div class="hist-bar-fill hb-ok" style="width:100%"></div></div>
+              <span class="hist-result hr-ok">Done</span>
+              <span class="hist-laststep">PR Merged</span>
+            </div>
+            <div class="hist-row">
+              <span class="hist-type ht-prfix">PR</span>
+              <span class="hist-ts">Jun 4 14:30</span>
+              <div class="hist-bar"><div class="hist-bar-fill hb-ok" style="width:100%"></div></div>
+              <span class="hist-result hr-ok">Done</span>
+              <span class="hist-laststep">Fixes pushed</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Status: Partial -->
+        <div class="status-header sg-partial" style="grid-column:1/-1">
+          <span class="status-icon">&#9888;</span>
+          <span class="status-label">Partial</span>
+          <span class="status-count">1</span>
+        </div>
+        <div class="story-row" onclick="toggleDetail(this)">
+          <div class="s-id">#4525</div>
+          <div class="s-repo"><span class="s-repo-tag">acme-frontend</span></div>
+          <div class="s-title-cell"><span class="s-title">Add dark mode support to checkout flow</span><button class="btn-exec" onclick="demoToast(event)">Execute</button></div>
+          <div class="s-indicators"><span class="ind ind-partial">Partial</span></div>
+          <div class="s-state"><span class="s-state-tag st-active">Active</span></div>
+        </div>
+        <div class="story-detail" id="detail-4525" style="display:none">
+          <div class="detail-sec">
+            <div class="detail-label">History</div>
+            <div class="hist-row">
+              <span class="hist-type ht-exec">Exec</span>
+              <span class="hist-ts">Jun 6 08:30</span>
+              <div class="hist-bar"><div class="hist-bar-fill hb-warn" style="width:65%"></div></div>
+              <span class="hist-result hr-warn">Partial</span>
+              <span class="hist-laststep">Test failures</span>
+            </div>
+            <div class="hist-row">
+              <span class="hist-type ht-plan">Plan</span>
+              <span class="hist-ts">Jun 5 17:00</span>
+              <div class="hist-bar"><div class="hist-bar-fill hb-ok" style="width:100%"></div></div>
+              <span class="hist-result hr-ok">Done</span>
+              <span class="hist-laststep">Spec ready</span>
+            </div>
+          </div>
+          <div class="detail-sec">
+            <div class="detail-label">Recent Commits</div>
+            <div class="commit-line"><span class="c-hash">a1b2c3d</span><span class="c-msg">feat: add CSS custom properties for dark mode theming</span><span class="c-date">Jun 6</span></div>
+            <div class="commit-line"><span class="c-hash">e4f5a6b</span><span class="c-msg">feat: toggle component and localStorage persistence</span><span class="c-date">Jun 6</span></div>
+          </div>
+        </div>
+
+        <!-- Status: Not planned -->
+        <div class="status-header sg-unplanned" style="grid-column:1/-1">
+          <span class="status-icon">&#183;</span>
+          <span class="status-label">Not planned</span>
+          <span class="status-count">1</span>
+        </div>
+        <div class="story-row">
+          <div class="s-id">#4540</div>
+          <div class="s-repo"><span class="s-repo-tag">acme-frontend</span></div>
+          <div class="s-title-cell"><span class="s-title">Upgrade Node.js from v18 to v22</span><button class="btn-plan" onclick="demoToast(event)">Analyze</button></div>
+          <div class="s-indicators"></div>
+          <div class="s-state"><span class="s-state-tag st-new">New</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- === acme-payments === -->
+    <div class="repo-card">
+      <div class="repo-header">
+        <span class="repo-icon">&#128230;</span>
+        <span class="repo-name">acme-payments</span>
+        <div class="repo-badges">
+          <span class="badge badge-count">2 stories</span>
+        </div>
+      </div>
+      <div class="story-grid">
+        <!-- Status: Done -->
+        <div class="status-header sg-done" style="grid-column:1/-1">
+          <span class="status-icon">&#10003;</span>
+          <span class="status-label">Done</span>
+          <span class="status-count">2</span>
+        </div>
+        <div class="story-row" onclick="toggleDetail(this)">
+          <div class="s-id">#4510</div>
+          <div class="s-repo"><span class="s-repo-tag">acme-payments</span></div>
+          <div class="s-title-cell"><span class="s-title">Add order export to CSV</span></div>
+          <div class="s-indicators"><span class="ind ind-done">Done</span></div>
+          <div class="s-state"><span class="s-state-tag st-closed">Closed</span></div>
+        </div>
+        <div class="story-detail" id="detail-4510" style="display:none">
+          <div class="detail-sec">
+            <div class="detail-label">Pull Requests</div>
+            <div class="pr-line">
+              <div class="pr-icon pri-merged">&#10003;</div>
+              <a href="#" onclick="demoToast(event)">feat: add CSV export for order history with date filters</a>
+              <div class="votes"><span class="vote v-yes">&#10003;</span><span class="vote v-yes">&#10003;</span></div>
+            </div>
+          </div>
+          <div class="detail-sec">
+            <div class="detail-label">History</div>
+            <div class="hist-row">
+              <span class="hist-type ht-exec">Exec</span>
+              <span class="hist-ts">Jun 3 11:20</span>
+              <div class="hist-bar"><div class="hist-bar-fill hb-ok" style="width:100%"></div></div>
+              <span class="hist-result hr-ok">Done</span>
+              <span class="hist-laststep">PR Merged</span>
+            </div>
+          </div>
+        </div>
+        <div class="story-row" onclick="toggleDetail(this)">
+          <div class="s-id">#4512</div>
+          <div class="s-repo"><span class="s-repo-tag">acme-payments</span></div>
+          <div class="s-title-cell"><span class="s-title">Fix timezone handling in delivery estimates</span></div>
+          <div class="s-indicators"><span class="ind ind-done">Done</span></div>
+          <div class="s-state"><span class="s-state-tag st-closed">Closed</span></div>
+        </div>
+        <div class="story-detail" id="detail-4512" style="display:none">
+          <div class="detail-sec">
+            <div class="detail-label">Pull Requests</div>
+            <div class="pr-line">
+              <div class="pr-icon pri-merged">&#10003;</div>
+              <a href="#" onclick="demoToast(event)">fix: normalize all delivery dates to UTC before customer timezone conversion</a>
+              <div class="votes"><span class="vote v-yes">&#10003;</span><span class="vote v-yes">&#10003;</span></div>
+            </div>
+          </div>
+          <div class="detail-sec">
+            <div class="detail-label">History</div>
+            <div class="hist-row">
+              <span class="hist-type ht-exec">Exec</span>
+              <span class="hist-ts">Jun 2 15:45</span>
+              <div class="hist-bar"><div class="hist-bar-fill hb-ok" style="width:100%"></div></div>
+              <span class="hist-result hr-ok">Done</span>
+              <span class="hist-laststep">PR Merged</span>
+            </div>
+            <div class="hist-row">
+              <span class="hist-type ht-prfix">PR</span>
+              <span class="hist-ts">Jun 3 09:10</span>
+              <div class="hist-bar"><div class="hist-bar-fill hb-ok" style="width:100%"></div></div>
+              <span class="hist-result hr-ok">Done</span>
+              <span class="hist-laststep">Review fixed</span>
+            </div>
+            <div class="hist-row">
+              <span class="hist-type ht-plan">Plan</span>
+              <span class="hist-ts">Jun 2 14:00</span>
+              <div class="hist-bar"><div class="hist-bar-fill hb-ok" style="width:100%"></div></div>
+              <span class="hist-result hr-ok">Done</span>
+              <span class="hist-laststep">Spec ready</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+
+  <!-- Daily Overview -->
+  <div class="daily-card">
+    <div class="daily-header">Daily Overview</div>
+    <div id="daily">
+      <div class="day-group">
+        <div class="day-date">Today - Jun 9</div>
+        <div class="day-item"><span class="day-tag tag-exec">Exec</span><span class="day-text">#4521 Add Stripe webhook handler - started execution</span></div>
+        <div class="day-item"><span class="day-tag tag-commit">Commit</span><span class="day-text">acme-api: feat: add StripeWebhookController scaffold (a3f9c21)</span></div>
+        <div class="day-item"><span class="day-tag tag-pr">PR</span><span class="day-text">#4518 Fix discount code stacking - review comment from Sarah K.</span></div>
+      </div>
+      <div class="day-group">
+        <div class="day-date">Jun 6</div>
+        <div class="day-item"><span class="day-tag tag-exec">Exec</span><span class="day-text">#4525 Dark mode checkout - partial completion (3/5 tasks done)</span></div>
+        <div class="day-item"><span class="day-tag tag-commit">Commit</span><span class="day-text">acme-frontend: feat: dark mode CSS custom properties (a1b2c3d)</span></div>
+        <div class="day-item"><span class="day-tag tag-commit">Commit</span><span class="day-text">acme-frontend: feat: dark mode toggle component (e4f5a6b)</span></div>
+      </div>
+      <div class="day-group">
+        <div class="day-date">Jun 5</div>
+        <div class="day-item"><span class="day-tag tag-exec">Exec</span><span class="day-text">#4518 Fix cart total calculation - completed, PR created</span></div>
+        <div class="day-item"><span class="day-tag tag-commit">Commit</span><span class="day-text">acme-api: fix: handle percentage discount rounding (a3f9c21)</span></div>
+        <div class="day-item"><span class="day-tag tag-story">Story</span><span class="day-text">#4525 Dark mode checkout - spec generated and approved</span></div>
+        <div class="day-item"><span class="day-tag tag-task">Task</span><span class="day-text">#4530 Session migration - plan created, 4 tasks generated</span></div>
+        <div class="day-item"><span class="day-tag tag-task">Task</span><span class="day-text">#4531 Rate limiting - plan created, 3 tasks generated</span></div>
+      </div>
+      <div class="day-group">
+        <div class="day-date">Jun 4</div>
+        <div class="day-item"><span class="day-tag tag-exec">Exec</span><span class="day-text">#4519 Product search with Elasticsearch - completed, PR created</span></div>
+        <div class="day-item"><span class="day-tag tag-pr">PR</span><span class="day-text">#4519 Search implementation - PR approved and merged</span></div>
+        <div class="day-item"><span class="day-tag tag-commit">Commit</span><span class="day-text">acme-frontend: feat: SearchBar with debounced ES queries (d4e5f67)</span></div>
+      </div>
+      <div class="day-group">
+        <div class="day-date">Jun 3</div>
+        <div class="day-item"><span class="day-tag tag-pr">PR</span><span class="day-text">#4510 Order CSV export - PR approved and merged</span></div>
+        <div class="day-item"><span class="day-tag tag-pr">PR</span><span class="day-text">#4512 Timezone fix - review comments addressed, re-approved</span></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /shell -->
+
+<script>
+function demoToast(e) {
+  if (e) { e.stopPropagation(); e.preventDefault(); }
+  var existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  var t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = 'Demo mode \u2014 actions disabled';
+  document.body.appendChild(t);
+  setTimeout(function() { if (t.parentNode) t.remove(); }, 2500);
+}
+
+function toggleDetail(row) {
+  // Find the next sibling .story-detail
+  var els = row.parentNode.children;
+  var found = false;
+  for (var i = 0; i < els.length; i++) {
+    if (found && els[i].classList.contains('story-detail')) {
+      els[i].style.display = els[i].style.display === 'none' ? '' : 'none';
+      return;
+    }
+    // story-row uses display:contents so we match by checking if it's the row's first child
+    if (els[i] === row.children[0] || els[i] === row) {
+      found = true;
+    }
+  }
+  // Fallback: find story-detail right after the story-row children
+  // With display:contents, the row's children are direct in the grid
+  // We need to find the detail by ID from the s-id
+  var idEl = row.querySelector('.s-id');
+  if (idEl) {
+    var id = idEl.textContent.replace('#','');
+    var detail = document.getElementById('detail-' + id);
+    if (detail) {
+      detail.style.display = detail.style.display === 'none' ? '' : 'none';
+    }
+  }
+}
+</script>
+
+</body>
+</html>
