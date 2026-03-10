@@ -328,13 +328,13 @@ Opens at `http://localhost:3000`. The `--cwd` must point to the project director
 ### Features
 
 - **Story groups** — stories are automatically classified into status groups:
-  - **I gang** — agent is currently working on the story
-  - **Afventer verificering** — story is Resolved with a pending PR. Click **Godkend** to close it after staging verification
-  - **Delvis** — execution started but didn't complete
-  - **Planlagt** — analyzed and ready for execution. Click **Udfør plan** to start
-  - **Ikke planlagt** — in sprint but not yet analyzed. Click **Analysér** to plan it
-  - **Blokeret** — title contains "BLOKERET" or execution was skipped
-  - **Afsluttet** — Closed/Done in Azure DevOps
+  - **Active** — agent is currently working on the story
+  - **Awaiting verification** — story is Resolved with a pending PR. Click **Approve** to close it after staging verification
+  - **Partial** — execution started but didn't complete
+  - **Planned** — analyzed and ready for execution. Click **Execute** to start
+  - **Not planned** — in sprint but not yet analyzed. Click **Analyze** to plan it
+  - **Blocked** — title contains "BLOKERET" or execution was skipped
+  - **Done** — Closed/Done in Azure DevOps
 - **Live agent status** — see what the agent is doing right now (which step, which story)
 - **Expandable run history** — click completed runs to see step-by-step log with timestamps
 - **PR status** — badges show active/merged/rejected, with a "Fix PR" button for active PRs

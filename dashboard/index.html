@@ -628,7 +628,7 @@
       <span id="sprint-dates"></span>
     </div>
   </div>
-  <button class="btn-refresh" onclick="refreshAll()">Opdater</button>
+  <button class="btn-refresh" onclick="refreshAll()">Refresh</button>
 </div>
 
 <div class="shell">
@@ -636,7 +636,7 @@
     <div class="ab-main">
       <div class="ab-pulse idle" id="ab-pulse"></div>
       <span class="ab-label idle" id="ab-label">IDLE</span>
-      <span class="ab-story" id="ab-story" style="color:var(--dim)">Ingen aktiv agent</span>
+      <span class="ab-story" id="ab-story" style="color:var(--dim)">No active agent</span>
       <span class="ab-time" id="ab-time"></span>
     </div>
     <div id="ab-extra" style="display:none">
@@ -651,8 +651,8 @@
 
   <div class="stats">
     <div class="stat"><div class="stat-label">Stories</div><div class="stat-val" id="s-stories" style="color:var(--indigo)">-</div></div>
-    <div class="stat"><div class="stat-label">Afsluttet</div><div class="stat-val" id="s-done" style="color:var(--green)">-</div></div>
-    <div class="stat"><div class="stat-label">Aktive PRs</div><div class="stat-val" id="s-prs" style="color:var(--blue)">-</div></div>
+    <div class="stat"><div class="stat-label">Done</div><div class="stat-val" id="s-done" style="color:var(--green)">-</div></div>
+    <div class="stat"><div class="stat-label">Active PRs</div><div class="stat-val" id="s-prs" style="color:var(--blue)">-</div></div>
     <div class="stat"><div class="stat-label">Repos</div><div class="stat-val" id="s-repos" style="color:var(--purple)">-</div></div>
     <div class="stat"><div class="stat-label">Commits</div><div class="stat-val" id="s-commits" style="color:var(--cyan)">-</div></div>
   </div>
@@ -660,7 +660,7 @@
   <div id="main"><div class="loading"><div class="spinner"></div>Henter sprint...</div></div>
 
   <div class="daily-card">
-    <div class="daily-header">Dagsoversigt</div>
+    <div class="daily-header">Daily Overview</div>
     <div id="daily"><div class="loading"><div class="spinner"></div></div></div>
   </div>
 </div>
@@ -726,7 +726,7 @@ function renderAgent(d) {
     pulse.className = 'ab-pulse idle';
     label.className = 'ab-label idle';
     label.textContent = 'IDLE';
-    story.textContent = 'Ingen aktiv agent';
+    story.textContent = 'No active agent';
     story.style.color = 'var(--dim)';
     time.textContent = '';
     extra.style.display = 'none';
@@ -753,7 +753,7 @@ function renderAgent(d) {
     banner.className = 'agent-banner done';
     pulse.className = 'ab-pulse done';
     label.className = 'ab-label done';
-    label.textContent = 'FÆRDIG';
+    label.textContent = 'DONE';
     story.style.color = '';
     if (a.storyId) {
       story.innerHTML = `<span class="id">#${a.storyId}</span>${E(a.storyTitle)}`;
@@ -775,7 +775,7 @@ function renderAgent(d) {
   banner.className = 'agent-banner';
   pulse.className = 'ab-pulse';
   label.className = 'ab-label';
-  label.textContent = 'AKTIV';
+  label.textContent = 'ACTIVE';
   story.style.color = '';
   if (a.storyId) {
     story.innerHTML = `<span class="id">#${a.storyId}</span>${E(a.storyTitle)}`;
@@ -872,20 +872,20 @@ function openSpecPanel(storyId, title, readOnly) {
   panel.appendChild(header);
 
   const body = cel('div', 'spec-body');
-  body.textContent = 'Henter plan\u2026';
+  body.textContent = 'Loading plan\u2026';
   panel.appendChild(body);
 
   const footer = cel('div', 'spec-footer');
-  const cancelBtn = cel('button', 'btn-cancel', 'Luk');
+  const cancelBtn = cel('button', 'btn-cancel', 'Close');
   cancelBtn.onclick = function() { overlay.remove(); };
   footer.appendChild(cancelBtn);
   if (!readOnly) {
     const launchBtn = cel('button', 'btn-launch', '\u25B6 Start execution');
     launchBtn.disabled = true;
     launchBtn.onclick = function() {
-      launchBtn.disabled = true; launchBtn.textContent = 'Starter\u2026';
+      launchBtn.disabled = true; launchBtn.textContent = 'Starting\u2026';
       fetch('/api/execute', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({storyId: storyId}) })
-        .then(r => r.json()).then(() => { launchBtn.textContent = 'Startet \u2713'; setTimeout(() => overlay.remove(), 1000); })
+        .then(r => r.json()).then(() => { launchBtn.textContent = 'Started \u2713'; setTimeout(() => overlay.remove(), 1000); })
         .catch(() => { launchBtn.disabled = false; launchBtn.textContent = '\u25B6 Start execution'; });
     };
     footer.appendChild(launchBtn);
@@ -900,7 +900,7 @@ function openSpecPanel(storyId, title, readOnly) {
   fetch('/api/story-spec?id=' + storyId)
     .then(r => { if (!r.ok) throw new Error('Not found'); return r.json(); })
     .then(d => { body.innerHTML = renderMarkdown(d.markdown); if (body._launchBtn) body._launchBtn.disabled = false; })
-    .catch(() => { body.textContent = 'Ingen plan fundet. K\u00f8r /devsprint-plan ' + storyId + ' f\u00f8rst.'; });
+    .catch(() => { body.textContent = 'No plan found. Run /devsprint-plan ' + storyId + ' first.'; });
 }
 
 /* ── Plan launch + question/answer flow ── */
@@ -914,7 +914,7 @@ function launchPlan(storyId, title) {
       // Brief toast notification
       const toast = cel('div', '');
       toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--cyan);color:#fff;padding:10px 24px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:600;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,0.15);';
-      toast.textContent = 'Analyse startet for #' + storyId;
+      toast.textContent = 'Analysis started for #' + storyId;
       document.body.appendChild(toast);
       setTimeout(() => { toast.remove(); delete _activePlans[storyId]; }, 3000);
     })
@@ -931,7 +931,7 @@ function launchPrFix(storyId, prId, repoName) {
     .then(() => {
       const toast = cel('div', '');
       toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--blue);color:#fff;padding:10px 24px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:600;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,0.15);';
-      toast.textContent = 'PR-fix startet for #' + storyId;
+      toast.textContent = 'PR-fix started for #' + storyId;
       document.body.appendChild(toast);
       setTimeout(() => { toast.remove(); delete _activePrFix[storyId]; }, 3000);
     })
@@ -942,7 +942,7 @@ function showQuestions(body, footer, storyId, qData, onAnswered) {
   body.innerHTML = '';
   const qs = qData.questions || [];
   if (!qs.length) {
-    body.innerHTML = '<div class="q-progress">Ingen sp\u00f8rgsm\u00e5l fra agenten.</div>';
+    body.innerHTML = '<div class="q-progress">No questions from the agent.</div>';
     return;
   }
 
@@ -1037,11 +1037,11 @@ function fillIndicators(el, s, ctx) {
   if (planned && !ex) el.appendChild(cel('span', 'ind ind-planned', 'Planned'));
   if (pr) {
     if (pr.prStatus === 'completed') el.appendChild(cel('span', 'ind ind-pr-merged', 'PR merged'));
-    else if (pr.prStatus === 'abandoned') el.appendChild(cel('span', 'ind ind-pr-rejected', 'PR lukket'));
-    else el.appendChild(cel('span', 'ind ind-pr-active', 'PR aktiv'));
+    else if (pr.prStatus === 'abandoned') el.appendChild(cel('span', 'ind ind-pr-rejected', 'PR closed'));
+    else el.appendChild(cel('span', 'ind ind-pr-active', 'PR active'));
   }
   if (ex && !pr) {
-    el.appendChild(cel('span', ex.status === 'completed' ? 'ind ind-done' : 'ind ind-partial', ex.status === 'completed' ? 'F\u00e6rdig' : 'Delvis'));
+    el.appendChild(cel('span', ex.status === 'completed' ? 'ind ind-done' : 'ind ind-partial', ex.status === 'completed' ? 'Done' : 'Partial'));
   }
 }
 
@@ -1090,9 +1090,9 @@ function buildHistRow(h, forStoryId, isLive) {
     bar.appendChild(fill);
     r.appendChild(bar);
     // Result badge
-    if (isDone) r.appendChild(cel('span', 'hist-result hr-ok', 'Færdig'));
-    else if (isErr) r.appendChild(cel('span', 'hist-result hr-err', 'Fejl'));
-    else r.appendChild(cel('span', 'hist-result hr-warn', 'Afbrudt'));
+    if (isDone) r.appendChild(cel('span', 'hist-result hr-ok', 'Done'));
+    else if (isErr) r.appendChild(cel('span', 'hist-result hr-err', 'Error'));
+    else r.appendChild(cel('span', 'hist-result hr-warn', 'Cancelled'));
     // Last step name
     var stepName = items.length ? items[items.length - 1].name : lastStep;
     if (stepName && !isDone) r.appendChild(cel('span', 'hist-laststep', stepName));
@@ -1100,7 +1100,7 @@ function buildHistRow(h, forStoryId, isLive) {
   r.appendChild(cel('span', 'hist-spacer'));
   // View plan button
   if (forStoryId && isPlan && !isLive) {
-    var viewBtn = cel('button', 'hist-view-btn', 'Vis plan');
+    var viewBtn = cel('button', 'hist-view-btn', 'View plan');
     viewBtn.onclick = function(e) { e.stopPropagation(); openSpecPanel(forStoryId, '', true); };
     r.appendChild(viewBtn);
   }
@@ -1132,7 +1132,7 @@ function buildHistRow(h, forStoryId, isLive) {
     if (h.endedAt) {
       var dr = cel('div', 'hist-detail-row');
       dr.appendChild(cel('span', 'hist-detail-dot'));
-      dr.appendChild(cel('span', 'hist-detail-info', isDone ? 'Afsluttet' : isErr ? 'Fejlet' : 'Afbrudt'));
+      dr.appendChild(cel('span', 'hist-detail-info', isDone ? 'Done' : isErr ? 'Failed' : 'Cancelled'));
       dr.appendChild(cel('span', 'hist-detail-time', D(h.endedAt)));
       detail.appendChild(dr);
     }
@@ -1176,7 +1176,7 @@ function buildStoryRow(s, ctx) {
   titleCell.appendChild(cel('span', 's-title', s.title));
   const cls = classifyStory(s, ctx);
   if (cls === 'unplanned') {
-    const planBtn = cel('button', 'btn-plan', 'Analys\u00e9r');
+    const planBtn = cel('button', 'btn-plan', 'Analyze');
     planBtn.onclick = function(e) {
       e.stopPropagation();
       launchPlan(s.id, s.title);
@@ -1184,26 +1184,26 @@ function buildStoryRow(s, ctx) {
     titleCell.appendChild(planBtn);
   }
   if (cls === 'review') {
-    const closeBtn = cel('button', 'btn-exec', 'Godkend');
+    const closeBtn = cel('button', 'btn-exec', 'Approve');
     closeBtn.style.background = 'var(--green)';
     closeBtn.onclick = function(e) {
       e.stopPropagation();
       closeBtn.disabled = true; closeBtn.textContent = '...';
       F('/api/close-story', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ storyId: s.id }) })
         .then(function() { refreshAll(); })
-        .catch(function(err) { closeBtn.textContent = 'Fejl'; setTimeout(function() { closeBtn.disabled = false; closeBtn.textContent = 'Godkend'; }, 2000); });
+        .catch(function(err) { closeBtn.textContent = 'Error'; setTimeout(function() { closeBtn.disabled = false; closeBtn.textContent = 'Approve'; }, 2000); });
     };
     titleCell.appendChild(closeBtn);
   }
   if (cls === 'planned' || cls === 'partial') {
-    const reBtn = cel('button', 'btn-plan', 'Re-analys\u00e9r');
+    const reBtn = cel('button', 'btn-plan', 'Re-analyze');
     reBtn.style.right = '108px';
     reBtn.onclick = function(e) {
       e.stopPropagation();
       launchPlan(s.id, s.title);
     };
     titleCell.appendChild(reBtn);
-    const btn = cel('button', 'btn-exec', 'Udf\u00f8r plan');
+    const btn = cel('button', 'btn-exec', 'Execute');
     btn.onclick = function(e) {
       e.stopPropagation();
       openSpecPanel(s.id, s.title);
@@ -1430,13 +1430,13 @@ function buildMainDOM(mainEl, statusGroups, ctx) {
   _dom.storyDoms.clear();
 
   const groupMeta = {
-    live:      { label: 'I gang',              icon: '\u25B6', css: 'sg-active'  },
-    review:    { label: 'Afventer verificering', icon: '\u23F3', css: 'sg-review' },
-    partial:   { label: 'Delvis',              icon: '\u25D4', css: 'sg-partial' },
-    planned:   { label: 'Planlagt',            icon: '\u25CB', css: 'sg-planned' },
-    unplanned: { label: 'Ikke planlagt',       icon: '\u2013', css: 'sg-unplanned' },
-    blocked:   { label: 'Blokeret',            icon: '\u2298', css: 'sg-blocked' },
-    done:      { label: 'Afsluttet',           icon: '\u2713', css: 'sg-done'    },
+    live:      { label: 'Active',              icon: '\u25B6', css: 'sg-active'  },
+    review:    { label: 'Awaiting verification', icon: '\u23F3', css: 'sg-review' },
+    partial:   { label: 'Partial',              icon: '\u25D4', css: 'sg-partial' },
+    planned:   { label: 'Planned',            icon: '\u25CB', css: 'sg-planned' },
+    unplanned: { label: 'Not planned',       icon: '\u2013', css: 'sg-unplanned' },
+    blocked:   { label: 'Blocked',            icon: '\u2298', css: 'sg-blocked' },
+    done:      { label: 'Done',           icon: '\u2713', css: 'sg-done'    },
   };
   const groupOrder = ['live', 'review', 'partial', 'planned', 'unplanned', 'blocked', 'done'];
 
@@ -1591,7 +1591,7 @@ function updateStoryAgent(d) {
 function buildDailyDOM(el, days) {
   while (el.firstChild) el.removeChild(el.firstChild);
   if (!Object.keys(days).length) {
-    el.appendChild(cel('div', 'empty', 'Ingen aktivitet endnu'));
+    el.appendChild(cel('div', 'empty', 'No activity yet'));
     return;
   }
   for (const [day, items] of Object.entries(days)) {
