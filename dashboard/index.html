@@ -271,59 +271,62 @@
   .v-wait { background: var(--amber-light); color: var(--amber); }
   .v-none { background: var(--border); color: var(--mute); }
 
-  /* ── History runs — pipeline ── */
+  /* ── History runs — flight deck ── */
   .hist-row {
-    display: flex; align-items: center; gap: 0; padding: 5px 0;
-    border-radius: 5px; transition: background 0.15s;
+    border-radius: 6px; padding: 8px 12px; margin-bottom: 4px;
+    background: var(--white); border: 1px solid var(--border-light);
+    border-left: 3px solid var(--mute);
+    transition: border-color 0.15s, box-shadow 0.15s;
   }
-  .hist-row:hover { background: rgba(0,0,0,0.02); }
-  .hist-meta {
-    display: flex; align-items: center; gap: 6px; flex-shrink: 0; min-width: 128px; margin-right: 8px;
+  .hist-row:hover { box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  .hist-row.ht-plan-row { border-left-color: #0891b2; }
+  .hist-row.ht-exec-row { border-left-color: #7c3aed; }
+  .hist-head {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
   }
   .hist-ts {
-    font-family: var(--mono); font-size: 10px; color: var(--text2); flex-shrink: 0;
+    font-family: var(--mono); font-size: 11px; color: var(--text2); font-weight: 500;
     font-variant-numeric: tabular-nums;
   }
   .hist-type {
-    font-family: var(--mono); font-size: 8px; font-weight: 700; padding: 2px 7px;
-    border-radius: 10px; text-transform: uppercase; letter-spacing: 0.4px; flex-shrink: 0;
-    line-height: 1.2;
+    font-family: var(--mono); font-size: 9px; font-weight: 700; padding: 2px 8px;
+    border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px;
   }
-  .hist-type.ht-plan { background: rgba(6,182,212,0.14); color: #0e7490; border: 1px solid rgba(6,182,212,0.3); }
-  .hist-type.ht-exec { background: rgba(139,92,246,0.14); color: #6d28d9; border: 1px solid rgba(139,92,246,0.3); }
-  .hist-pipeline {
-    display: flex; align-items: center; flex: 1; overflow-x: auto; overflow-y: hidden;
-    scrollbar-width: none; -ms-overflow-style: none;
-  }
-  .hist-pipeline::-webkit-scrollbar { display: none; }
-  .hist-step-pill {
-    font-family: var(--mono); font-size: 8px; font-weight: 600; padding: 3px 7px;
-    text-transform: uppercase; letter-spacing: 0.2px; flex-shrink: 0;
-    white-space: nowrap; line-height: 1.2; border-radius: 3px;
-  }
-  .hist-step-pill.hp-prev { opacity: 0.6; }
-  .hist-step-pill.hp-current { font-size: 9px; padding: 3px 9px; font-weight: 700; }
-  .hist-conn { width: 6px; height: 1.5px; flex-shrink: 0; background: var(--border); }
-  .hist-conn.hc-done { opacity: 0.3; }
+  .hist-type.ht-plan { background: #0891b2; color: #fff; }
+  .hist-type.ht-exec { background: #7c3aed; color: #fff; }
   .hist-view-btn {
-    font-family: var(--mono); font-size: 8px; font-weight: 600; padding: 3px 10px;
+    font-family: var(--mono); font-size: 9px; font-weight: 600; padding: 2px 10px;
     border-radius: 3px; border: 1px solid var(--border); background: var(--white);
     color: var(--text2); cursor: pointer; text-transform: uppercase; letter-spacing: 0.3px;
-    flex-shrink: 0; margin-left: 10px; transition: all 0.15s;
+    margin-left: auto; transition: all 0.15s;
   }
-  .hist-view-btn:hover { border-color: var(--indigo); color: var(--indigo); background: rgba(67,56,202,0.04); }
-  /* Active run */
+  .hist-view-btn:hover { border-color: var(--indigo); color: var(--indigo); }
+  .hist-steps {
+    display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+  }
+  .hist-step-tag {
+    font-family: var(--mono); font-size: 9px; font-weight: 600; padding: 3px 8px;
+    border-radius: 3px; text-transform: uppercase; letter-spacing: 0.2px;
+    white-space: nowrap;
+  }
+  .hist-step-tag.hp-prev { opacity: 0.5; }
+  .hist-step-tag.hp-current { font-weight: 700; font-size: 10px; padding: 3px 10px; }
+  .hist-arr { font-size: 8px; color: var(--mute); flex-shrink: 0; }
+  /* Active run — dark inversion */
   .hist-row.hist-live {
-    background: rgba(67,56,202,0.05); border: 1px solid rgba(67,56,202,0.18);
-    border-radius: 6px; padding: 8px 12px;
+    background: #1e1b4b; border-color: #312e81; border-left-color: var(--indigo);
+    box-shadow: 0 2px 12px rgba(67,56,202,0.15);
   }
-  .hist-row.hist-live .hist-meta { min-width: auto; }
-  .hist-row.hist-live .hist-ts { color: var(--indigo); font-weight: 600; font-size: 11px; }
-  .hist-row.hist-live .hist-step-pill { font-size: 9px; padding: 3px 9px; }
-  .hist-row.hist-live .hist-step-pill.hp-prev { opacity: 0.65; }
-  .hist-row.hist-live .hist-conn { width: 8px; }
-  @keyframes livePill { 0%,100%{ opacity:1; } 50%{ opacity:0.45; } }
-  .hist-row.hist-live .hist-step-pill.hp-current { animation: livePill 2s ease-in-out infinite; }
+  .hist-row.hist-live .hist-ts { color: rgba(255,255,255,0.7); }
+  .hist-row.hist-live .hist-type { background: var(--indigo); }
+  .hist-row.hist-live .hist-step-tag { opacity: 1; }
+  .hist-row.hist-live .hist-step-tag.hp-prev { opacity: 0.55; }
+  .hist-row.hist-live .hist-step-tag.hp-current { font-size: 11px; }
+  .hist-row.hist-live .hist-arr { color: rgba(255,255,255,0.3); }
+  .hist-row.hist-live .hist-view-btn { border-color: rgba(255,255,255,0.2); color: rgba(255,255,255,0.7); background: transparent; }
+  .hist-row.hist-live .hist-view-btn:hover { border-color: rgba(255,255,255,0.5); color: #fff; }
+  @keyframes liveTag { 0%,100%{ opacity:1; } 50%{ opacity:0.5; } }
+  .hist-row.hist-live .hist-step-tag.hp-current { animation: liveTag 2s ease-in-out infinite; }
   .hist-more {
     font-family: var(--mono); font-size: 10px; color: var(--indigo);
     cursor: pointer; padding: 4px 0; user-select: none; letter-spacing: 0.3px;
@@ -981,15 +984,20 @@ const STEP_COLORS = {
   'st-work':'#7c3aed','st-error':'#dc2626'
 };
 function buildHistRow(h, forStoryId) {
-  const r = cel('div', 'hist-row');
-  // Meta: timestamp + type
-  const meta = cel('span', 'hist-meta');
-  meta.appendChild(cel('span', 'hist-ts', D(h.startedAt)));
   const isPlan = isPlanStep(h.step);
-  meta.appendChild(cel('span', 'hist-type ' + (isPlan ? 'ht-plan' : 'ht-exec'), isPlan ? 'Plan' : 'Exec'));
-  r.appendChild(meta);
-  // Pipeline of step pills with connectors
-  const pipe = cel('span', 'hist-pipeline');
+  const r = cel('div', 'hist-row ' + (isPlan ? 'ht-plan-row' : 'ht-exec-row'));
+  // Head: timestamp + type + view btn
+  const head = cel('div', 'hist-head');
+  head.appendChild(cel('span', 'hist-ts', D(h.startedAt)));
+  head.appendChild(cel('span', 'hist-type ' + (isPlan ? 'ht-plan' : 'ht-exec'), isPlan ? 'Plan' : 'Exec'));
+  if (forStoryId && isPlan) {
+    var viewBtn = cel('button', 'hist-view-btn', 'Vis plan');
+    viewBtn.onclick = function(e) { e.stopPropagation(); openSpecPanel(forStoryId, '', true); };
+    head.appendChild(viewBtn);
+  }
+  r.appendChild(head);
+  // Steps as tags
+  const stepsEl = cel('div', 'hist-steps');
   var log = h.stepLog || [];
   if (forStoryId && log.length) {
     log = log.filter(function(e) { return !e.storyId || e.storyId === forStoryId; });
@@ -1003,20 +1011,12 @@ function buildHistRow(h, forStoryId) {
     for (var i = 0; i <= ci && i < steps.length; i++) items.push({ name: steps[i], scls: stepColor(steps[i]), last: i === ci });
   }
   for (var i = 0; i < items.length; i++) {
-    if (i > 0) {
-      var conn = cel('span', 'hist-conn' + (items[i-1].last ? '' : ' hc-done'));
-      pipe.appendChild(conn);
-    }
-    var pill = cel('span', 'hist-step-pill ' + items[i].scls + (items[i].last ? ' hp-current' : ' hp-prev'));
-    pill.textContent = items[i].name;
-    pipe.appendChild(pill);
+    if (i > 0) stepsEl.appendChild(cel('span', 'hist-arr', '\u203a'));
+    var tag = cel('span', 'hist-step-tag ' + items[i].scls + (items[i].last ? ' hp-current' : ' hp-prev'));
+    tag.textContent = items[i].name;
+    stepsEl.appendChild(tag);
   }
-  r.appendChild(pipe);
-  if (forStoryId && isPlan) {
-    var viewBtn = cel('button', 'hist-view-btn', 'Vis plan');
-    viewBtn.onclick = function(e) { e.stopPropagation(); openSpecPanel(forStoryId, '', true); };
-    r.appendChild(viewBtn);
-  }
+  r.appendChild(stepsEl);
   return r;
 }
 
