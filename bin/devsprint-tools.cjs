@@ -785,8 +785,17 @@ function cmdClearStatus(cwd) {
   } catch {}
 
   if (existing.active) {
-    existing.history.unshift({ ...existing.active, endedAt: new Date().toISOString() });
-    if (existing.history.length > 20) existing.history = existing.history.slice(0, 20);
+    const archived = { ...existing.active, endedAt: new Date().toISOString() };
+    // Mark as Done so dashboard knows this run completed successfully
+    archived.step = 'Done';
+    if (archived.stepLog) {
+      const lastLog = archived.stepLog.length ? archived.stepLog[archived.stepLog.length - 1] : null;
+      if (!lastLog || lastLog.step !== 'Done') {
+        archived.stepLog.push({ step: 'Done', detail: null, at: new Date().toISOString(), storyId: archived.storyId || null });
+      }
+    }
+    existing.history.unshift(archived);
+    if (existing.history.length > 50) existing.history = existing.history.slice(0, 50);
   }
   existing.active = null;
   fs.writeFileSync(statusPath, JSON.stringify(existing, null, 2), 'utf-8');

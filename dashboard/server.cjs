@@ -390,8 +390,24 @@ async function handleRequest(req, res) {
             delete cleanEnv.CLAUDECODE;
             const execBat = path.join(CWD, '.planning', '_run_exec.bat');
             fs.writeFileSync(execBat, `@echo off\nset "CLAUDECODE="\ncd /d "${CWD}"\nclaude -p "/devsprint-execute ${storyId} --headless" --dangerously-skip-permissions --verbose\n`);
-            execFn(`start cmd /k "${execBat}"`, { shell: true });
+            execFn(`start /min cmd /c "${execBat}"`, { shell: true });
             data = { status: 'launched', storyId };
+          } else {
+            res.writeHead(405); res.end(JSON.stringify({ error: 'POST only' })); return;
+          }
+          break;
+        case '/api/pr-fix':
+          if (req.method === 'POST') {
+            let body = '';
+            req.on('data', c => body += c);
+            await new Promise(r => req.on('end', r));
+            const { storyId: prFixId } = JSON.parse(body);
+            if (!prFixId) { res.writeHead(400); res.end(JSON.stringify({ error: 'storyId required' })); return; }
+            const { exec: prFixExec } = require('child_process');
+            const prFixBat = path.join(CWD, '.planning', '_run_prfix.bat');
+            fs.writeFileSync(prFixBat, `@echo off\nset "CLAUDECODE="\ncd /d "${CWD}"\nclaude -p "/devsprint-pr-fix ${prFixId} --headless" --dangerously-skip-permissions --verbose\n`);
+            prFixExec(`start /min cmd /c "${prFixBat}"`, { shell: true });
+            data = { status: 'launched', storyId: prFixId };
           } else {
             res.writeHead(405); res.end(JSON.stringify({ error: 'POST only' })); return;
           }
@@ -413,7 +429,7 @@ async function handleRequest(req, res) {
             delete planEnv.CLAUDECODE;
             const planBat = path.join(CWD, '.planning', '_run_plan.bat');
             fs.writeFileSync(planBat, `@echo off\nset "CLAUDECODE="\ncd /d "${CWD}"\nclaude -p "/devsprint-plan ${planId} --headless --reanalyze" --dangerously-skip-permissions --verbose\n`);
-            planExec(`start cmd /c "${planBat}"`, { shell: true });
+            planExec(`start /min cmd /c "${planBat}"`, { shell: true });
             data = { status: 'launched', storyId: planId };
           } else {
             res.writeHead(405); res.end(JSON.stringify({ error: 'POST only' })); return;

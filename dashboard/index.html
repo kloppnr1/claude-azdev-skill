@@ -112,14 +112,14 @@
   .ab-srow .id { color: var(--indigo); font-family: var(--mono); font-size: 10px; min-width: 50px; }
   .ab-srow .name { color: var(--text2); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
   .ab-srow .ab-sstep { font-family: var(--mono); font-size: 8px; font-weight: 600; padding: 1px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.3px; }
-  .st-load { background: rgba(107,114,128,0.12); color: #6b7280; }
-  .st-analyze { background: rgba(6,182,212,0.12); color: #0891b2; }
-  .st-spec { background: rgba(245,158,11,0.12); color: #d97706; }
-  .st-devops { background: rgba(59,130,246,0.12); color: #2563eb; }
-  .st-done { background: rgba(34,197,94,0.12); color: #16a34a; }
-  .st-test { background: rgba(249,115,22,0.12); color: #ea580c; }
-  .st-work { background: rgba(139,92,246,0.12); color: #7c3aed; }
-  .st-error { background: rgba(239,68,68,0.12); color: #dc2626; }
+  .st-load { background: rgba(107,114,128,0.15); color: #4b5563; }
+  .st-analyze { background: rgba(6,182,212,0.18); color: #0e7490; }
+  .st-spec { background: rgba(245,158,11,0.18); color: #b45309; }
+  .st-devops { background: rgba(59,130,246,0.18); color: #1d4ed8; }
+  .st-done { background: rgba(34,197,94,0.18); color: #15803d; }
+  .st-test { background: rgba(249,115,22,0.18); color: #c2410c; }
+  .st-work { background: rgba(139,92,246,0.18); color: #6d28d9; }
+  .st-error { background: rgba(239,68,68,0.18); color: #b91c1c; }
   .ab-srow .ab-sdesc { color: var(--dim); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
   .story-row.story-live > :first-child { box-shadow: inset 3px 0 0 var(--indigo); }
 
@@ -206,7 +206,7 @@
   }
   .ind-live { background: var(--indigo-light); color: var(--indigo); }
   .ind-planned { background: var(--purple-light); color: var(--purple); }
-  .ind-pr-active { background: var(--blue-light); color: var(--blue); }
+  .ind-pr-active { background: var(--blue); color: #fff; }
   .ind-pr-merged { background: var(--green-light); color: var(--green); }
   .ind-pr-rejected { background: var(--red-light); color: var(--red); }
   .ind-done { background: var(--green-light); color: var(--green); }
@@ -227,7 +227,7 @@
   /* ── Story Detail (expanded) ── */
   .story-detail {
     grid-column: 1 / -1;
-    padding: 10px 16px 12px 64px; background: var(--bg2);
+    padding: 10px 16px 12px 16px; background: var(--bg2);
     border-bottom: 1px solid var(--border);
   }
   .detail-sec { margin-bottom: 8px; }
@@ -271,64 +271,89 @@
   .v-wait { background: var(--amber-light); color: var(--amber); }
   .v-none { background: var(--border); color: var(--mute); }
 
-  /* ── History runs — flight deck ── */
+  /* ── History runs ── */
   .hist-row {
-    border-radius: 6px; padding: 8px 12px; margin-bottom: 4px;
-    background: var(--white); border: 1px solid var(--border-light);
-    border-left: 3px solid var(--mute);
-    transition: border-color 0.15s, box-shadow 0.15s;
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 8px; border-radius: 5px;
+    transition: background 0.12s;
   }
-  .hist-row:hover { box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
-  .hist-row.ht-plan-row { border-left-color: #0891b2; }
-  .hist-row.ht-exec-row { border-left-color: #7c3aed; }
-  .hist-head {
-    display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
-  }
-  .hist-ts {
-    font-family: var(--mono); font-size: 11px; color: var(--text2); font-weight: 500;
-    font-variant-numeric: tabular-nums;
-  }
+  .hist-row:hover { background: rgba(0,0,0,0.03); }
   .hist-type {
-    font-family: var(--mono); font-size: 9px; font-weight: 700; padding: 2px 8px;
+    font-family: var(--mono); font-size: 9px; font-weight: 700; padding: 2px 7px;
     border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px;
+    line-height: 1; flex-shrink: 0;
   }
-  .hist-type.ht-plan { background: #0891b2; color: #fff; }
-  .hist-type.ht-exec { background: #7c3aed; color: #fff; }
+  .hist-type.ht-plan { background: #0e7490; color: #fff; }
+  .hist-type.ht-exec { background: #6d28d9; color: #fff; }
+  .hist-ts {
+    font-family: var(--mono); font-size: 10px; color: var(--dim); font-weight: 500;
+    font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0;
+  }
+  .hist-bar {
+    width: 60px; height: 5px; border-radius: 3px; background: var(--border-light);
+    overflow: hidden; flex-shrink: 0;
+  }
+  .hist-bar-fill {
+    height: 100%; border-radius: 3px; transition: width 0.3s;
+  }
+  .hist-bar-fill.hb-ok { background: var(--green); }
+  .hist-bar-fill.hb-err { background: var(--red); }
+  .hist-bar-fill.hb-warn { background: var(--amber); }
+  .hist-result {
+    font-family: var(--mono); font-size: 9px; font-weight: 600; padding: 2px 7px;
+    border-radius: 3px; text-transform: uppercase; letter-spacing: 0.3px; flex-shrink: 0;
+  }
+  .hist-result.hr-ok { background: rgba(34,197,94,0.15); color: #15803d; }
+  .hist-result.hr-err { background: rgba(239,68,68,0.15); color: #b91c1c; }
+  .hist-result.hr-warn { background: rgba(217,119,6,0.12); color: #b45309; }
+  .hist-laststep {
+    font-family: var(--mono); font-size: 9px; color: var(--mute);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;
+    flex-shrink: 1;
+  }
+  .hist-spacer { flex: 1; min-width: 8px; }
   .hist-view-btn {
-    font-family: var(--mono); font-size: 9px; font-weight: 600; padding: 2px 10px;
-    border-radius: 3px; border: 1px solid var(--border); background: var(--white);
-    color: var(--text2); cursor: pointer; text-transform: uppercase; letter-spacing: 0.3px;
-    margin-left: auto; transition: all 0.15s;
+    font-family: var(--mono); font-size: 9px; font-weight: 600; padding: 2px 8px;
+    border-radius: 3px; border: 1px solid var(--border); background: transparent;
+    color: var(--dim); cursor: pointer; text-transform: uppercase; letter-spacing: 0.2px;
+    transition: all 0.15s; white-space: nowrap; flex-shrink: 0;
   }
   .hist-view-btn:hover { border-color: var(--indigo); color: var(--indigo); }
-  .hist-steps {
-    display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
-  }
-  .hist-step-tag {
-    font-family: var(--mono); font-size: 9px; font-weight: 600; padding: 3px 8px;
-    border-radius: 3px; text-transform: uppercase; letter-spacing: 0.2px;
-    white-space: nowrap;
-  }
-  .hist-step-tag.hp-prev { opacity: 0.5; }
-  .hist-step-tag.hp-current { font-weight: 700; font-size: 10px; padding: 3px 10px; }
-  .hist-arr { font-size: 8px; color: var(--mute); flex-shrink: 0; }
-  /* Active run — dark inversion */
+  /* Active run — card with step track */
   .hist-row.hist-live {
-    background: #1e1b4b; border-color: #312e81; border-left-color: var(--indigo);
-    box-shadow: 0 2px 12px rgba(67,56,202,0.15);
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 10px; margin-bottom: 4px; flex-wrap: wrap;
+    box-shadow: 0 2px 10px rgba(67,56,202,0.10);
   }
-  .hist-row.hist-live .hist-ts { color: rgba(255,255,255,0.7); }
-  .hist-row.hist-live .hist-type { background: var(--indigo); }
-  .hist-row.hist-live .hist-step-tag { opacity: 1; }
-  .hist-row.hist-live .hist-step-tag.hp-prev { opacity: 0.55; }
-  .hist-row.hist-live .hist-step-tag.hp-current { font-size: 11px; }
-  .hist-row.hist-live .hist-arr { color: rgba(255,255,255,0.3); }
-  .hist-row.hist-live .hist-view-btn { border-color: rgba(255,255,255,0.2); color: rgba(255,255,255,0.7); background: transparent; }
-  .hist-row.hist-live .hist-view-btn:hover { border-color: rgba(255,255,255,0.5); color: #fff; }
-  @keyframes liveTag { 0%,100%{ opacity:1; } 50%{ opacity:0.5; } }
-  .hist-row.hist-live .hist-step-tag.hp-current { animation: liveTag 2s ease-in-out infinite; }
+  .hist-track {
+    display: flex; align-items: stretch; gap: 1px;
+    height: 28px; border-radius: 4px; overflow: hidden;
+    width: 100%; margin-top: 6px;
+  }
+  .hist-seg {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 8px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.3px;
+    white-space: nowrap; overflow: hidden; min-width: 0;
+    padding: 0 6px;
+  }
+  .hist-seg span { overflow: hidden; text-overflow: ellipsis; }
+  .hist-seg.hp-prev { opacity: 0.45; }
+  .hist-seg.hp-current { flex: 1.8; font-size: 9px; font-weight: 800; }
+  .hist-seg.st-load { background: #d1d5db; color: #374151; }
+  .hist-seg.st-analyze { background: #67e8f9; color: #0e4f5c; }
+  .hist-seg.st-spec { background: #fcd34d; color: #713f12; }
+  .hist-seg.st-devops { background: #93c5fd; color: #1e3a5f; }
+  .hist-seg.st-done { background: #6ee7b7; color: #064e3b; }
+  .hist-seg.st-test { background: #fdba74; color: #6c2e0a; }
+  .hist-seg.st-work { background: #c4b5fd; color: #3b1a80; }
+  .hist-seg.st-error { background: #fca5a5; color: #7f1d1d; }
+  @keyframes liveGlow { 0%,100% { box-shadow: 0 2px 10px rgba(67,56,202,0.10); } 50% { box-shadow: 0 2px 16px rgba(67,56,202,0.22); } }
+  .hist-row.hist-live { animation: liveGlow 2.5s ease-in-out infinite; }
+  @keyframes liveSeg { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+  .hist-row.hist-live .hist-seg.hp-current { animation: liveSeg 2s ease-in-out infinite; }
   .hist-more {
-    font-family: var(--mono); font-size: 10px; color: var(--indigo);
+    font-family: var(--mono); font-size: 10px; color: var(--indigo); font-weight: 600;
     cursor: pointer; padding: 4px 0; user-select: none; letter-spacing: 0.3px;
   }
   .hist-more:hover { text-decoration: underline; }
@@ -357,7 +382,7 @@
   }
   .s-repo-tag {
     display: inline-block; padding: 2px 8px; border-radius: 3px;
-    background: var(--border); color: var(--dim);
+    background: rgba(107,114,128,0.10); color: #6b6f85;
   }
   .btn-exec {
     font-family: var(--sans); font-size: 11px; font-weight: 600;
@@ -379,6 +404,14 @@
   }
   .btn-plan:hover { background: #0e7490; box-shadow: 0 0 20px rgba(8,145,178,0.5); }
   .btn-plan:disabled { opacity: 0.4; cursor: default; box-shadow: none; }
+  .btn-prfix {
+    font-family: var(--sans); font-size: 11px; font-weight: 600;
+    padding: 4px 12px; border-radius: 6px; border: 1px solid var(--blue);
+    background: transparent; color: var(--blue);
+    cursor: pointer; white-space: nowrap; transition: all 0.15s;
+    margin-left: 4px; flex-shrink: 0;
+  }
+  .btn-prfix:hover { background: var(--blue); color: #fff; }
   .story-row .btn-plan {
     position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
     opacity: 0; transition: opacity 0.15s; z-index: 2;
@@ -870,6 +903,22 @@ function launchPlan(storyId, title) {
   return;
 }
 
+const _activePrFix = {};
+function launchPrFix(storyId) {
+  if (_activePrFix[storyId]) return;
+  _activePrFix[storyId] = true;
+  fetch('/api/pr-fix', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({storyId: storyId}) })
+    .then(r => r.json())
+    .then(() => {
+      const toast = cel('div', '');
+      toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--blue);color:#fff;padding:10px 24px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:600;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,0.15);';
+      toast.textContent = 'PR-fix startet for #' + storyId;
+      document.body.appendChild(toast);
+      setTimeout(() => { toast.remove(); delete _activePrFix[storyId]; }, 3000);
+    })
+    .catch(() => { delete _activePrFix[storyId]; });
+}
+
 function showQuestions(body, footer, storyId, qData, onAnswered) {
   body.innerHTML = '';
   const qs = qData.questions || [];
@@ -983,21 +1032,13 @@ const STEP_COLORS = {
   'st-devops':'#2563eb','st-done':'#16a34a','st-test':'#ea580c',
   'st-work':'#7c3aed','st-error':'#dc2626'
 };
-function buildHistRow(h, forStoryId) {
+function buildHistRow(h, forStoryId, isLive) {
   const isPlan = isPlanStep(h.step);
-  const r = cel('div', 'hist-row ' + (isPlan ? 'ht-plan-row' : 'ht-exec-row'));
-  // Head: timestamp + type + view btn
-  const head = cel('div', 'hist-head');
-  head.appendChild(cel('span', 'hist-ts', D(h.startedAt)));
-  head.appendChild(cel('span', 'hist-type ' + (isPlan ? 'ht-plan' : 'ht-exec'), isPlan ? 'Plan' : 'Exec'));
-  if (forStoryId && isPlan) {
-    var viewBtn = cel('button', 'hist-view-btn', 'Vis plan');
-    viewBtn.onclick = function(e) { e.stopPropagation(); openSpecPanel(forStoryId, '', true); };
-    head.appendChild(viewBtn);
-  }
-  r.appendChild(head);
-  // Steps as tags
-  const stepsEl = cel('div', 'hist-steps');
+  const r = cel('div', 'hist-row');
+  // Type badge + timestamp
+  r.appendChild(cel('span', 'hist-type ' + (isPlan ? 'ht-plan' : 'ht-exec'), isPlan ? 'PLAN' : 'EXEC'));
+  r.appendChild(cel('span', 'hist-ts', D(h.startedAt)));
+  // Build step items for both history and live
   var log = h.stepLog || [];
   if (forStoryId && log.length) {
     log = log.filter(function(e) { return !e.storyId || e.storyId === forStoryId; });
@@ -1010,13 +1051,47 @@ function buildHistRow(h, forStoryId) {
     var ci = isPlan ? planI(h.step) : execI(h.step);
     for (var i = 0; i <= ci && i < steps.length; i++) items.push({ name: steps[i], scls: stepColor(steps[i]), last: i === ci });
   }
-  for (var i = 0; i < items.length; i++) {
-    if (i > 0) stepsEl.appendChild(cel('span', 'hist-arr', '\u203a'));
-    var tag = cel('span', 'hist-step-tag ' + items[i].scls + (items[i].last ? ' hp-current' : ' hp-prev'));
-    tag.textContent = items[i].name;
-    stepsEl.appendChild(tag);
+  var totalSteps = isPlan ? PLAN_STEPS.length : EXEC_STEPS.length;
+  var completedSteps = items.length;
+  var lastStep = h.step || '';
+  var isErr = /error|fail/i.test(lastStep) || items.some(function(it) { return it.scls === 'st-error'; });
+  var isDone = /done|complete|finish|merged|resolv/i.test(lastStep) || items.some(function(it) { return it.scls === 'st-done'; });
+  if (!isLive) {
+    // Mini progress bar showing completion
+    var bar = cel('div', 'hist-bar');
+    var pct = Math.round((completedSteps / totalSteps) * 100);
+    var fill = cel('div', 'hist-bar-fill');
+    fill.style.width = pct + '%';
+    if (isDone) fill.classList.add('hb-ok');
+    else if (isErr) fill.classList.add('hb-err');
+    else fill.classList.add('hb-warn');
+    bar.appendChild(fill);
+    r.appendChild(bar);
+    // Result badge
+    if (isDone) r.appendChild(cel('span', 'hist-result hr-ok', 'Færdig'));
+    else if (isErr) r.appendChild(cel('span', 'hist-result hr-err', 'Fejl'));
+    else r.appendChild(cel('span', 'hist-result hr-warn', 'Afbrudt'));
+    // Last step name
+    var stepName = items.length ? items[items.length - 1].name : lastStep;
+    if (stepName && !isDone) r.appendChild(cel('span', 'hist-laststep', stepName));
   }
-  r.appendChild(stepsEl);
+  r.appendChild(cel('span', 'hist-spacer'));
+  // View plan button
+  if (forStoryId && isPlan && !isLive) {
+    var viewBtn = cel('button', 'hist-view-btn', 'Vis plan');
+    viewBtn.onclick = function(e) { e.stopPropagation(); openSpecPanel(forStoryId, '', true); };
+    r.appendChild(viewBtn);
+  }
+  // For live runs: add step track
+  if (isLive) {
+    const track = cel('div', 'hist-track');
+    for (var i = 0; i < items.length; i++) {
+      var seg = cel('div', 'hist-seg ' + items[i].scls + (items[i].last ? ' hp-current' : ' hp-prev'));
+      seg.appendChild(cel('span', '', items[i].name));
+      track.appendChild(seg);
+    }
+    r.appendChild(track);
+  }
   return r;
 }
 
@@ -1027,7 +1102,7 @@ function buildStoryRow(s, ctx) {
   const live = ag && ag.active && ag.active.storyId === s.id;
   // History entries for this story from agent-status history
   const hist = ag && ag.history ? ag.history.filter(h => h.storyId === s.id) : [];
-  const hasDetail = !!(ex || pr || live || hist.length);
+  const hasDetail = !!(pr || live || hist.length);
 
   const row = cel('div', 'story-row');
   row.dataset.storyId = s.id;
@@ -1087,13 +1162,11 @@ function buildStoryRow(s, ctx) {
   }
   row.appendChild(repoEl);
 
-  // Click handler for expanding details
-  if (hasDetail) {
-    row.onclick = function() {
-      const d = document.querySelector('[data-story-detail="' + s.id + '"]');
-      if (d) d.style.display = d.style.display === 'none' ? 'block' : 'none';
-    };
-  }
+  // Click handler for expanding details (always enabled)
+  row.onclick = function() {
+    const d = document.querySelector('[data-story-detail="' + s.id + '"]');
+    if (d) d.style.display = d.style.display === 'none' ? 'block' : 'none';
+  };
 
   // Detail panel
   const detail = cel('div', 'story-detail');
@@ -1109,24 +1182,7 @@ function buildStoryRow(s, ctx) {
   agSec.appendChild(agContent);
   detail.appendChild(agSec);
 
-  if (ex) {
-    const sec = cel('div', 'detail-sec');
-    sec.appendChild(cel('div', 'detail-label', 'Execution'));
-    const r = cel('div', 'detail-row');
-    r.appendChild(cel('span', 'd-dot d-dot-' + (ex.status === 'completed' ? 'green' : 'amber')));
-    r.appendChild(cel('span', 'txt', ex.branch || ''));
-    r.appendChild(cel('span', 'ts', D(ex.completedAt)));
-    sec.appendChild(r);
-    if (ex.testsPassed !== undefined) {
-      const tr = cel('div', 'detail-row');
-      tr.appendChild(cel('span', 'd-dot d-dot-green'));
-      const tt = cel('span', 'txt', ex.testsPassed + ' ok' + (ex.testsFailed ? ', ' + ex.testsFailed + ' fejl' : ''));
-      tt.style.color = 'var(--green)';
-      tr.appendChild(tt);
-      sec.appendChild(tr);
-    }
-    detail.appendChild(sec);
-  }
+  // Execution info is shown via EXEC history rows — no separate section needed
 
   if (pr) {
     const ps = pr.prStatus === 'completed' ? 'merged' : pr.prStatus === 'abandoned' ? 'rejected' : 'active';
@@ -1152,6 +1208,11 @@ function buildStoryRow(s, ctx) {
         vs.appendChild(v);
       }
       pl.appendChild(vs);
+    }
+    if (ps === 'active') {
+      var fixBtn = cel('button', 'btn-prfix', 'Fix PR');
+      fixBtn.onclick = function(e) { e.stopPropagation(); launchPrFix(s.id); };
+      pl.appendChild(fixBtn);
     }
     sec.appendChild(pl);
     detail.appendChild(sec);
@@ -1316,7 +1377,6 @@ function buildMainDOM(mainEl, statusGroups, ctx) {
       const section = cel('div', 'commits-section');
       section.id = 'done-all'; section.style.display = 'none';
       const doneGrid = cel('div', 'story-grid');
-      doneGrid.style.opacity = '0.55';
       for (const s of stories) {
         const sd = buildStoryRow(s, ctx);
         doneGrid.appendChild(sd.row); doneGrid.appendChild(sd.detail);
@@ -1452,7 +1512,7 @@ function updateStoryAgent(d) {
       // Build a live run row reusing buildHistRow
       content.innerHTML = '';
       var liveData = { startedAt: a.startedAt, step: ss ? ss.step : a.step, stepLog: a.stepLog || [] };
-      var liveRow = buildHistRow(liveData, sid);
+      var liveRow = buildHistRow(liveData, sid, true);
       liveRow.classList.add('hist-live');
       content.appendChild(liveRow);
       // Auto-expand detail panel for active stories
@@ -1532,7 +1592,15 @@ async function refreshAll() {
 }
 
 refreshAll();
-setInterval(() => F('/api/agent-status').then(d => { S.agent = d; renderAgent(d); updateStoryAgent(d); }).catch(() => renderAgent(null)), 5000);
+let _lastAgentKey = '';
+setInterval(() => F('/api/agent-status').then(d => {
+  const aKey = JSON.stringify(d);
+  const changed = aKey !== _lastAgentKey;
+  _lastAgentKey = aKey;
+  S.agent = d; renderAgent(d); updateStoryAgent(d);
+  // Re-render board when agent status changes (story grouping + history)
+  if (changed && _dom.built) renderMain();
+}).catch(() => renderAgent(null)), 5000);
 setInterval(refreshAll, 60000);
 </script>
 </body>

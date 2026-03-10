@@ -53,6 +53,16 @@ devsprint-tools.cjs CLI contracts used by this command:
     -> --unresolved: filter to threads with status "active"
 </context>
 
+<dashboard_status>
+Report progress to the dashboard at EVERY major step by running:
+`node ~/.claude/bin/devsprint-tools.cjs report-status --story-id {storyId} --story-title "{storyTitle}" --step "<step>" --detail "<detail>" --cwd $CWD`
+
+Steps to report: "Finding PR", "Fetching comments", "Checking out branch", "Running baseline tests", "Implementing fix", "Running tests", "Pushing fixes", "Done"
+
+At the end (success or failure), clear status:
+`node ~/.claude/bin/devsprint-tools.cjs clear-status --cwd $CWD`
+</dashboard_status>
+
 <process>
 
 **Step 1 — Parse arguments:**
