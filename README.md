@@ -311,6 +311,45 @@ Team and area ensure that new work items land in the right place on the board. C
 
 Confirms your credentials work and have the required scopes.
 
+## Dashboard
+
+A real-time web dashboard for monitoring your sprint. Shows story status, active agent runs, PR status, execution history, and git activity — all auto-updating.
+
+![Dashboard overview](dashboard/screenshots/dashboard-overview.png)
+
+### Start the dashboard
+
+```bash
+node dashboard/server.cjs --cwd /path/to/your/project
+```
+
+Opens at `http://localhost:3000`. The `--cwd` must point to the project directory that contains `.planning/`.
+
+### Features
+
+- **Story groups** — stories are automatically classified into status groups:
+  - **I gang** — agent is currently working on the story
+  - **Afventer verificering** — story is Resolved with a pending PR. Click **Godkend** to close it after staging verification
+  - **Delvis** — execution started but didn't complete
+  - **Planlagt** — analyzed and ready for execution. Click **Udfør plan** to start
+  - **Ikke planlagt** — in sprint but not yet analyzed. Click **Analysér** to plan it
+  - **Blokeret** — title contains "BLOKERET" or execution was skipped
+  - **Afsluttet** — Closed/Done in Azure DevOps
+- **Live agent status** — see what the agent is doing right now (which step, which story)
+- **Expandable run history** — click completed runs to see step-by-step log with timestamps
+- **PR status** — badges show active/merged/rejected, with a "Fix PR" button for active PRs
+- **One-click actions** — Plan, Execute, Re-analyze, Fix PR, and Approve directly from the dashboard
+- **Auto-refresh** — polls every 5 seconds for agent status, 60 seconds for full data refresh
+
+### How it works
+
+The dashboard reads from files in `.planning/`:
+- `devsprint-task-map.json` — which stories are planned and where
+- `devsprint-execution-log.json` — execution results per story
+- `devsprint-agent-status.json` — real-time agent progress
+
+It also queries Azure DevOps for live sprint data and PR status.
+
 ## Commands
 
 ### `/devsprint-setup`
