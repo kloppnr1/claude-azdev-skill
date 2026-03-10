@@ -121,8 +121,6 @@
   .st-work { background: rgba(139,92,246,0.12); color: #7c3aed; }
   .st-error { background: rgba(239,68,68,0.12); color: #dc2626; }
   .ab-srow .ab-sdesc { color: var(--dim); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-  @keyframes liveBg { 0%,100%{ background: rgba(67,56,202,0.14); } 50%{ background: rgba(67,56,202,0.04); } }
-  .story-row.story-live > * { animation: liveBg 2s ease-in-out infinite; }
   .story-row.story-live > :first-child { box-shadow: inset 3px 0 0 var(--indigo); }
 
   /* ── Stats ── */
@@ -292,6 +290,15 @@
   }
   .hist-dot.hd-done { opacity: 0.5; }
   .hist-dot.hd-last { box-shadow: 0 0 4px currentColor; }
+  .hist-row.hist-live {
+    background: rgba(67,56,202,0.06); border: 1px solid rgba(67,56,202,0.18);
+    border-radius: 6px; padding: 6px 10px; gap: 8px;
+  }
+  .hist-row.hist-live .hist-ts { color: var(--indigo); font-weight: 600; }
+  .hist-row.hist-live .hist-dot { width: 8px; height: 8px; }
+  .hist-row.hist-live .hist-dot-label { font-size: 9px; padding: 2px 6px; }
+  @keyframes liveLastDot { 0%,100%{ opacity:1; } 50%{ opacity:0.4; } }
+  .hist-row.hist-live .hist-dot-label:last-child { animation: liveLastDot 2s ease-in-out infinite; }
   .hist-dot-label {
     font-family: var(--mono); font-size: 7px; font-weight: 600; padding: 1px 4px;
     border-radius: 2px; text-transform: uppercase; letter-spacing: 0.2px; flex-shrink: 0;
@@ -1443,7 +1450,9 @@ function updateStoryAgent(d) {
       // Build a live run row reusing buildHistRow
       content.innerHTML = '';
       var liveData = { startedAt: a.startedAt, step: ss ? ss.step : a.step, stepLog: a.stepLog || [] };
-      content.appendChild(buildHistRow(liveData, sid));
+      var liveRow = buildHistRow(liveData, sid);
+      liveRow.classList.add('hist-live');
+      content.appendChild(liveRow);
     } else {
       el.style.display = 'none';
     }
