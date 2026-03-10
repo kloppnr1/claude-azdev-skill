@@ -1096,11 +1096,8 @@ function buildStoryRow(s, ctx) {
   agSec.dataset.storyAgent = s.id;
   agSec.style.display = 'none';
   agSec.appendChild(cel('div', 'detail-label', 'Agent'));
-  const agRow = cel('div', 'detail-row');
-  agRow.appendChild(cel('span', 'd-dot d-dot-live'));
-  agRow.appendChild(cel('span', 'txt agent-txt'));
-  agRow.appendChild(cel('span', 'ts agent-ts'));
-  agSec.appendChild(agRow);
+  const agContent = cel('div', 'agent-content');
+  agSec.appendChild(agContent);
   detail.appendChild(agSec);
 
   if (ex) {
@@ -1439,14 +1436,14 @@ function updateStoryAgent(d) {
   document.querySelectorAll('[data-story-agent]').forEach(el => {
     const sid = parseInt(el.dataset.storyAgent);
     const ss = storyMap[String(sid)];
-    if (ss) {
+    const content = el.querySelector('.agent-content');
+    if (!content) return;
+    if (ss || (a && a.storyId === sid)) {
       el.style.display = '';
-      el.querySelector('.agent-txt').textContent = (ss.step || '') + (ss.detail ? ' \u2014 ' + ss.detail : '');
-      el.querySelector('.agent-ts').textContent = AGO(ss.updatedAt);
-    } else if (a && a.storyId === sid) {
-      el.style.display = '';
-      el.querySelector('.agent-txt').textContent = (a.step || '') + (a.detail ? ' \u2014 ' + a.detail : '');
-      el.querySelector('.agent-ts').textContent = AGO(a.updatedAt);
+      // Build a live run row reusing buildHistRow
+      content.innerHTML = '';
+      var liveData = { startedAt: a.startedAt, step: ss ? ss.step : a.step, stepLog: a.stepLog || [] };
+      content.appendChild(buildHistRow(liveData, sid));
     } else {
       el.style.display = 'none';
     }
