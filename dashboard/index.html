@@ -546,6 +546,8 @@
   .sg-planned .status-count { background: var(--cyan-light); color: var(--cyan); }
   .sg-blocked .status-label { color: var(--red); }
   .sg-blocked .status-count { background: var(--red-light); color: var(--red); }
+  .sg-review .status-label { color: var(--purple); }
+  .sg-review .status-count { background: var(--purple-light); color: var(--purple); }
   .sg-partial .status-label { color: var(--amber); }
   .sg-partial .status-count { background: var(--amber-light); color: var(--amber); }
   .sg-unplanned .status-label { color: var(--dim); }
@@ -1385,8 +1387,8 @@ function buildCommits(git, repoStories, repoId, cutoff) {
 
 /* ── Classify a story into a status group based on devsprint workflow ── */
 function classifyStory(s, ctx) {
-  const { exM, ag, plannedIds, isDone } = ctx;
-  // DevOps state overrides: if Resolved/Closed/Done in DevOps, it's done
+  const { exM, ag, plannedIds, isDone, isResolved } = ctx;
+  // Closed/Done in DevOps — fully completed
   if (isDone(s)) return 'done';
   // Blocked — title contains BLOKERET, or execution was skipped due to blocker
   if (s.title && s.title.toUpperCase().includes('BLOKERET')) return 'blocked';
@@ -1397,11 +1399,13 @@ function classifyStory(s, ctx) {
     const stories = ag.active.stories || {};
     if (ag.active.storyId === s.id || stories[String(s.id)]) return 'live';
   }
-  // Completed — execution log says completed (skip if reanalyzed)
-  if (ex && !ex.reanalyzed && ex.status === 'completed') return 'done';
+  // Resolved in DevOps — awaiting PR review/merge
+  if (isResolved(s)) return 'review';
+  // Completed in execution log but not yet resolved in DevOps
+  if (ex && !ex.reanalyzed && ex.status === 'completed') return 'review';
   // Partial — execution log says partial (skip if reanalyzed)
   if (ex && !ex.reanalyzed && ex.status === 'partial') return 'partial';
-  // Planned — in task map with tasks but not executed
+  // Planned — in task map but not executed
   if (plannedIds.has(s.id)) return 'planned';
   // Not planned — in sprint but not in task map
   return 'unplanned';
@@ -1414,14 +1418,15 @@ function buildMainDOM(mainEl, statusGroups, ctx) {
   _dom.storyDoms.clear();
 
   const groupMeta = {
-    live:      { label: 'I gang',        icon: '\u25B6', css: 'sg-active'  },
-    partial:   { label: 'Delvis',        icon: '\u25D4', css: 'sg-partial' },
-    planned:   { label: 'Planlagt',      icon: '\u25CB', css: 'sg-planned' },
-    unplanned: { label: 'Ikke planlagt', icon: '\u2013', css: 'sg-unplanned' },
-    blocked:   { label: 'Blokeret',      icon: '\u2298', css: 'sg-blocked' },
-    done:      { label: 'Afsluttet',     icon: '\u2713', css: 'sg-done'    },
+    live:      { label: 'I gang',              icon: '\u25B6', css: 'sg-active'  },
+    review:    { label: 'Afventer verificering', icon: '\u23F3', css: 'sg-review' },
+    partial:   { label: 'Delvis',              icon: '\u25D4', css: 'sg-partial' },
+    planned:   { label: 'Planlagt',            icon: '\u25CB', css: 'sg-planned' },
+    unplanned: { label: 'Ikke planlagt',       icon: '\u2013', css: 'sg-unplanned' },
+    blocked:   { label: 'Blokeret',            icon: '\u2298', css: 'sg-blocked' },
+    done:      { label: 'Afsluttet',           icon: '\u2713', css: 'sg-done'    },
   };
-  const groupOrder = ['live', 'partial', 'planned', 'unplanned', 'blocked', 'done'];
+  const groupOrder = ['live', 'review', 'partial', 'planned', 'unplanned', 'blocked', 'done'];
 
   for (const key of groupOrder) {
     const stories = statusGroups[key] || [];
@@ -1436,38 +1441,13 @@ function buildMainDOM(mainEl, statusGroups, ctx) {
     header.appendChild(cel('span', 'status-count', String(stories.length)));
     card.appendChild(header);
 
-    if (key === 'done') {
-      // Completed stories — collapsed by default
-      const toggle = cel('div', 'commits-toggle');
-      const arrow = cel('span', 'ct-arrow', '\u25B6');
-      const label = cel('span', 'ct-label', stories.length + ' afsluttede stories');
-      label.style.color = 'var(--green)';
-      toggle.appendChild(arrow); toggle.appendChild(label);
-      const section = cel('div', 'commits-section');
-      section.id = 'done-all'; section.style.display = 'none';
-      const doneGrid = cel('div', 'story-grid');
-      for (const s of stories) {
-        const sd = buildStoryRow(s, ctx);
-        doneGrid.appendChild(sd.row); doneGrid.appendChild(sd.detail);
-        _dom.storyDoms.set(s.id, sd);
-      }
-      section.appendChild(doneGrid);
-      toggle.onclick = function() {
-        const show = section.style.display === 'none';
-        section.style.display = show ? '' : 'none';
-        arrow.textContent = show ? '\u25BC' : '\u25B6';
-      };
-      card.appendChild(toggle);
-      card.appendChild(section);
-    } else {
-      const grid = cel('div', 'story-grid');
-      for (const s of stories) {
-        const sd = buildStoryRow(s, ctx);
-        grid.appendChild(sd.row); grid.appendChild(sd.detail);
-        _dom.storyDoms.set(s.id, sd);
-      }
-      card.appendChild(grid);
+    const grid = cel('div', 'story-grid');
+    for (const s of stories) {
+      const sd = buildStoryRow(s, ctx);
+      grid.appendChild(sd.row); grid.appendChild(sd.detail);
+      _dom.storyDoms.set(s.id, sd);
     }
+    card.appendChild(grid);
 
     mainEl.appendChild(card);
   }
@@ -1491,13 +1471,15 @@ function renderMain() {
     }
   }
 
-  const stories = sp.items.filter(i => i.type === 'User Story' || i.type === 'Bug');
+  const itemIds = new Set(sp.items.map(i => i.id));
+  const stories = sp.items.filter(i => (i.type === 'User Story') || (i.type === 'Bug' && (!i.parentId || !itemIds.has(i.parentId))));
   const exM = {}; if (S.exec && S.exec.executions) for (const x of S.exec.executions) exM[x.storyId] = x;
   const prM = {}; for (const p of S.pr) prM[p.storyId] = p;
   const gitM = {}; for (const r of S.git) gitM[r.repoName] = r;
   const sRM = {}; if (S.map && S.map.mappings) for (const m of S.map.mappings) if (m.repoPath) sRM[m.storyId] = m.repoPath.replace(/\\/g, '/').split('/').pop();
 
-  const isDone = s => ['resolved', 'closed', 'done'].includes((s.state || '').toLowerCase());
+  const isDone = s => ['closed', 'done'].includes((s.state || '').toLowerCase());
+  const isResolved = s => (s.state || '').toLowerCase() === 'resolved';
   const allR = new Set(); if (S.map && S.map.mappings) for (const m of S.map.mappings) if (m.repoPath) allR.add(m.repoPath.replace(/\\/g, '/').split('/').pop());
 
   document.getElementById('s-stories').textContent = stories.length;
@@ -1510,17 +1492,17 @@ function renderMain() {
   const plannedIds = new Set();
   if (S.map && S.map.mappings) for (const m of S.map.mappings) if (m.repoPath) plannedIds.add(m.storyId);
 
-  const ctx = { exM, prM, gitM, ag, plannedIds, commitCutoff: weekdayCutoff(3), isDone, sRM };
+  const ctx = { exM, prM, gitM, ag, plannedIds, commitCutoff: weekdayCutoff(3), isDone, isResolved, sRM };
 
   // Classify stories into status groups based on devsprint workflow
-  const statusGroups = { live: [], partial: [], planned: [], unplanned: [], blocked: [], done: [] };
+  const statusGroups = { live: [], review: [], partial: [], planned: [], unplanned: [], blocked: [], done: [] };
   for (const s of stories) {
     statusGroups[classifyStory(s, ctx)].push(s);
   }
 
   // Structure key: which status groups have which stories
   const structKey = JSON.stringify(
-    ['live', 'partial', 'planned', 'unplanned', 'blocked', 'done'].map(k => [k, (statusGroups[k] || []).map(s => s.id)])
+    ['live', 'review', 'partial', 'planned', 'unplanned', 'blocked', 'done'].map(k => [k, (statusGroups[k] || []).map(s => s.id)])
   );
 
   if (!_dom.built || structKey !== _dom.structKey) {
@@ -1693,6 +1675,12 @@ setInterval(() => F('/api/agent-status').then(d => {
   S.agent = d; renderAgent(d); updateStoryAgent(d);
   // Re-render board when agent status changes (story grouping + history)
   if (changed && _dom.built) renderMain();
+  // Light-weight task-map poll — catches PLAN completion even if clear-status was missed
+  if (changed) F('/api/task-map').then(function(tm) {
+    var k = JSON.stringify(tm);
+    var prev = JSON.stringify(S.map);
+    if (k !== prev) { S.map = tm; renderMain(); renderDaily(); }
+  }).catch(function(){});
 }).catch(() => renderAgent(null)), 5000);
 setInterval(refreshAll, 60000);
 </script>

@@ -1,6 +1,6 @@
 ---
 name: devsprint-execute
-description: Execute story plans and update Azure DevOps task status automatically
+description: Execute story plans and update Azure DevOps story status automatically
 argument-hint: "[story-id]"
 allowed-tools:
   - Read
@@ -23,7 +23,7 @@ When the user needs to provide open-ended feedback or corrections, respond with 
 </context_rule>
 
 <objective>
-Execute one or all stories from the task map. For each story: create a feature branch, activate tasks in Azure DevOps, implement the work from the story spec, auto-resolve tasks and story, push, and create a PR.
+Execute one or all stories from the task map. For each story: create a feature branch, implement the work from the story spec, auto-resolve the story in Azure DevOps, push, and create a PR.
 
 **Mode depends on arguments:**
 - With story ID (`/devsprint-execute 42920`): single-story mode — interactive, can ask user questions on blockers.
@@ -48,11 +48,6 @@ devsprint-tools.cjs CLI contracts used by this command:
     -> stdout: JSON {"status":"updated","id":N,"state":"<newState>"}
     -> Valid states: "New", "Active", "Resolved", "Closed"
     -> exit 0 on success, exit 1 on error (invalid transition, 403, etc.)
-
-  node ~/.claude/bin/devsprint-tools.cjs get-child-states --id <storyId> --cwd $CWD
-    -> stdout: JSON {"allResolved": bool, "children": [{"id":N,"title":"...","state":"..."}]}
-    -> allResolved is true when every child is Resolved, Closed, or Done
-    -> exit 0 on success, exit 1 on error
 
   node ~/.claude/bin/devsprint-tools.cjs create-branch --repo <path> --story-id <id> --title <title> [--base <branch>]
     -> Stashes dirty changes, fetches base branch (develop, fallback main), creates feature/<id>-<slug>
@@ -80,8 +75,6 @@ devsprint-execution-log.json structure (written by /devsprint-execute after each
         "baseBranch": "develop",
         "prUrl": "https://...",
         "prId": 123,
-        "tasksResolved": [12346, 12347],
-        "tasksRemaining": [12348],
         "testsPassed": 42,
         "testsFailed": 0,
         "testCommand": "dotnet test",
@@ -122,7 +115,7 @@ Check for the `--headless` flag in the arguments:
 
 **Behavioral rules by mode:**
 - `single` mode (default): mostly autonomous. The agent makes best judgment calls on blockers and continues. Only uses `AskUserQuestion` if the story spec explicitly marks something as "BLOKERER implementation". Stop on critical errors.
-- `single` mode with `--headless`: fully autonomous, identical to `all` mode. NEVER uses `AskUserQuestion`. Blockers are logged as "skipped" and the agent continues with remaining tasks. Critical errors are logged, not stopped on.
+- `single` mode with `--headless`: fully autonomous, identical to `all` mode. NEVER uses `AskUserQuestion`. Blockers are logged as "skipped" and the agent continues. Critical errors are logged, not stopped on.
 - `all` mode: fully autonomous. The agent does NOT use `AskUserQuestion` at any point. If you encounter a blocker on one story, log the error and move on to the next story. The user expects to walk away and come back to completed work.
 
 **Context isolation:** In both modes, each story runs inside its own Agent to keep the main conversation lightweight and prevent context exhaustion. The orchestrator only handles pre-flight checks, agent launching, log writing, and the final summary.
@@ -154,8 +147,6 @@ Structure:
       "status": "completed",
       "branch": "feature/12345-...",
       "prUrl": "https://...",
-      "tasksResolved": [12346, 12347],
-      "tasksRemaining": [],
       "testsPassed": 42,
       "testsFailed": 0,
       "testSuiteStatus": "all passed",
@@ -175,16 +166,16 @@ Run `node ~/.claude/bin/devsprint-tools.cjs get-sprint-items --me --cwd $CWD` to
 
 For each mapping in the task map, determine its status by checking:
 1. The execution log (was it previously executed?)
-2. The Azure DevOps state (is the story/tasks Resolved/Closed?)
+2. The Azure DevOps state (is the story Resolved/Closed?)
 3. Whether the story title contains "BLOKERET" (blocked)
-4. Whether the mapping has `repoPath` and `taskIds` (is it actionable?)
+4. Whether the mapping has `repoPath` (is it actionable?)
 
 Classify each story into one of these categories:
 - `already-executed` — found in execution log with status "completed" AND story is Resolved/Closed in DevOps
-- `already-resolved` — story or all tasks are Resolved/Closed/Done in DevOps (even if not in log)
+- `already-resolved` — story is Resolved/Closed/Done in DevOps (even if not in log)
 - `blocked` — title contains "BLOKERET"
-- `not-actionable` — no repoPath or empty taskIds
-- `partial` — found in execution log with status "partial" (some tasks remain)
+- `not-actionable` — no repoPath
+- `partial` — found in execution log with status "partial"
 - `pending` — not yet executed, has work to do
 
 **Step 3b — Display pre-flight status:**
@@ -202,19 +193,19 @@ Display a clear status table showing ALL stories and what will happen:
 
 Already completed:
   ✓ #{storyId} — {storyTitle}
-    Executed: {completedAt} | PR: {prUrl} | Tasks: {resolved}/{total}
+    Executed: {completedAt} | PR: {prUrl}
   ✓ #{storyId} — {storyTitle}
-    Resolved in DevOps (all tasks done)
+    Resolved in DevOps
 
 Skipping:
   ⊘ #{storyId} — {storyTitle} (BLOKERET)
-  ⊘ #{storyId} — {storyTitle} (no repo/tasks assigned)
+  ⊘ #{storyId} — {storyTitle} (no repo assigned)
 
 Will execute:
   → #{storyId} — {storyTitle}
-    State: {devOpsState} | Tasks: {resolved}/{total} done | Repo: {repoPath}
-  → #{storyId} — {storyTitle} (RESUMING — {N} tasks remaining)
-    Previous: {completedAt} | Tasks: {resolved}/{total} done
+    State: {devOpsState} | Repo: {repoPath}
+  → #{storyId} — {storyTitle} (RESUMING)
+    Previous: {completedAt}
 
 Summary: {pendingCount} to execute, {completedCount} already done, {skippedCount} skipped
 ```
@@ -253,35 +244,34 @@ Display:
 
 Launch an Agent with the full execution instructions for this single story (Steps 4a–4h). The agent prompt must include:
 - **CRITICAL context rule: NEVER mention context usage, context limits, or suggest starting a new session. NEVER offer to "save findings for later" or "continue in a new session". Auto-compact handles context automatically — just keep working.**
-- The story mapping (storyId, storyTitle, repoPath, taskIds, taskTitles)
+- The story mapping (storyId, storyTitle, repoPath)
 - The path to the story spec: `{repoPath}/.planning/stories/{storyId}.md`
 - The path to the config: `$CWD/.planning/devsprint-config.json`
-- All devsprint-tools.cjs CLI contracts needed (update-state, get-child-states, create-branch, create-pr)
+- All devsprint-tools.cjs CLI contracts needed (update-state, create-branch, create-pr)
 - The TDD workflow (RED → GREEN → REFACTOR)
 - Instruction to verify the FULL test suite passes BEFORE writing any code (baseline check on base branch). If tests fail, skip the story.
-- Instruction to run the FULL test suite (`dotnet test` / `npm test` / `pytest`) after all implementation — not just new tests. All tests must pass before resolving tasks.
-- Instruction to return a JSON summary: `{"storyId": N, "status": "completed|partial|skipped", "branch": "...", "prUrl": "...", "tasksResolved": [...], "tasksRemaining": [...], "testsPassed": N, "testsFailed": N, "testCommand": "...", "testSuiteStatus": "all passed|failures|no test infrastructure", "uiVerified": true|false, "screenshotPath": ".planning/screenshots/{storyId}.png"|null, "error": "..."}`
+- Instruction to run the FULL test suite (`dotnet test` / `npm test` / `pytest`) after all implementation — not just new tests. All tests must pass before resolving the story.
+- Instruction to return a JSON summary: `{"storyId": N, "status": "completed|partial|skipped", "branch": "...", "prUrl": "...", "testsPassed": N, "testsFailed": N, "testCommand": "...", "testSuiteStatus": "all passed|failures|no test infrastructure", "uiVerified": true|false, "screenshotPath": ".planning/screenshots/{storyId}.png"|null, "error": "..."}`
 - **Dashboard status reporting** — the agent MUST report its progress to the dashboard at each major step by running:
   `node ~/.claude/bin/devsprint-tools.cjs report-status --story-id {storyId} --story-title "{storyTitle}" --step "<step>" --detail "<detail>" --repo "{repoName}" --cwd $CWD`
   Report status at these points:
-  - Step 4a: `--step "Checking story state" --detail "Fetching child states from Azure DevOps"`
+  - Step 4a: `--step "Checking story state" --detail "Fetching story state from Azure DevOps"`
   - Step 4b: `--step "Loading story spec" --detail "Reading {storyId}.md"`
   - Step 4b.1: `--step "Running baseline tests" --detail "{testCommand}" --command "{testCommand}"`
   - Step 4c: `--step "Creating feature branch" --detail "feature/{storyId}-..." --branch "feature/{storyId}-..."`
-  - Step 4d: `--step "Activating tasks" --detail "Setting {N} tasks to Active"`
-  - Step 4e (RED): `--step "Writing tests (RED)" --detail "Writing failing tests for {taskTitle}"`
-  - Step 4e (GREEN): `--step "Implementing (GREEN)" --detail "Making tests pass for {taskTitle}"`
-  - Step 4e (full suite): `--step "Running full test suite" --detail "{testCommand}" --command "{testCommand}"`
-  - Step 4e.5: `--step "UI verification" --detail "Checking visual output for frontend changes"`
-  - Step 4f: `--step "Resolving tasks" --detail "Resolving {N} tasks in Azure DevOps"`
-  - Step 4g: `--step "Creating PR" --detail "Pushing and creating pull request"`
-  - Step 4h: `--step "Complete" --detail "Story #{storyId} finished"`
+  - Step 4d (RED): `--step "Writing tests (RED)" --detail "Writing failing tests"`
+  - Step 4d (GREEN): `--step "Implementing (GREEN)" --detail "Making tests pass"`
+  - Step 4d (full suite): `--step "Running full test suite" --detail "{testCommand}" --command "{testCommand}"`
+  - Step 4d.5: `--step "UI verification" --detail "Checking visual output for frontend changes"`
+  - Step 4e: `--step "Resolving story" --detail "Setting story to Resolved in Azure DevOps"`
+  - Step 4f: `--step "Creating PR" --detail "Pushing and creating pull request"`
+  - Step 4g: `--step "Complete" --detail "Story #{storyId} finished"`
 
 **Mode-specific agent instructions:**
 - `all` mode or `headless`: Include instruction to NEVER use `AskUserQuestion` — fully autonomous. On blockers, make best judgment and continue. Critical errors are logged, not stopped on.
 - `single` mode (not headless): Include instruction to make best judgment and continue on blockers, like `all` mode. Only use `AskUserQuestion` if the story spec explicitly marks something as "BLOKERER implementation". Stop on critical errors (missing spec, test baseline failures).
 
-Do NOT run agents in background — run them sequentially so each story completes before the next starts. Parse the agent's returned summary, add to `executionResults`, and **immediately write to the execution log** (Step 4i) before launching the next agent. This ensures progress is persisted even if a later story crashes or the session is interrupted.
+Do NOT run agents in background — run them sequentially so each story completes before the next starts. Parse the agent's returned summary, add to `executionResults`, and **immediately write to the execution log** (Step 4g) before launching the next agent. This ensures progress is persisted even if a later story crashes or the session is interrupted.
 
 Steps 4a–4h below describe the work the agent performs:
 
@@ -289,14 +279,10 @@ Execute Steps 4a–4h below. In `all` mode or `--headless`: if any step encounte
 
   **Step 4a — Check story state:**
 
-  Run `node ~/.claude/bin/devsprint-tools.cjs get-child-states --id {storyId} --cwd $CWD` to check current state.
-
-  Also fetch the story's own state from the sprint items:
   Run `node ~/.claude/bin/devsprint-tools.cjs get-sprint-items --me --cwd $CWD` and find the item matching `storyId`.
 
   - If the story state is "Resolved", "Closed", or "Done": log "Story #{storyId} already resolved — skipping", record as "skipped — already resolved", continue to next story.
-  - If `allResolved === true`: log "All tasks for #{storyId} already resolved — skipping", record as "skipped — all tasks resolved", continue to next story.
-  - If some tasks are already resolved: note which ones. Only activate and work on the remaining tasks in subsequent steps. Display: "Skipping {N} already resolved tasks. Working on {M} remaining."
+  - Otherwise: proceed with execution.
 
   **Step 4b — Load story spec:**
 
@@ -305,7 +291,7 @@ Execute Steps 4a–4h below. In `all` mode or `--headless`: if any step encounte
      - `single` mode: tell user "No story spec found. Run `/devsprint-plan {storyId}` to generate it." Stop.
      - `all` mode: log error, record as "skipped — no story spec", continue to next story.
 
-  2. Parse the story spec — it contains goal, acceptance criteria, technical context (key files, architecture), implementation notes, open questions, and tasks. This is your single source of truth for the implementation.
+  2. Parse the story spec — it contains goal, acceptance criteria, technical context (key files, architecture), and implementation notes. This is your single source of truth for the implementation.
 
   **Step 4b.1 — MANDATORY: Verify existing test suite passes BEFORE any code changes:**
 
@@ -333,23 +319,7 @@ Execute Steps 4a–4h below. In `all` mode or `--headless`: if any step encounte
     - `single` mode: show error and stop.
     - `all` mode: log error, record as "skipped — branch creation failed", continue to next story.
 
-  **Step 4d — Activate tasks in Azure DevOps:**
-
-  Track which task IDs are successfully activated in a list called `activatedTaskIds`.
-
-  For each task ID in `taskIds` (skip already-resolved tasks from Step 4a):
-  1. Run `node ~/.claude/bin/devsprint-tools.cjs update-state --id {taskId} --state "Active" --cwd $CWD`
-  2. If exit 0: add to `activatedTaskIds`.
-  3. If exit 1: warn but continue. The task may already be Active or in a non-transitionable state. Do NOT add to `activatedTaskIds`.
-
-  Display:
-  ```
-  Task status updates:
-    #{taskId} ({taskTitle}): Active ✓
-    #{taskId} ({taskTitle}): already Active (skipped)
-  ```
-
-  **Step 4e — Execute the work (TDD approach):**
+  **Step 4d — Execute the work (TDD approach):**
 
   This is the main implementation phase using **Test-Driven Development**. The story spec contains everything needed: goal, acceptance criteria, key files, implementation notes, and open questions. Do NOT re-analyze the codebase.
 
@@ -382,7 +352,7 @@ Execute Steps 4a–4h below. In `all` mode or `--headless`: if any step encounte
      - Run tests again after refactoring to ensure nothing broke.
      - Commit implementation: `feat: implement {description} for #{storyId}`
 
-     Repeat the RED→GREEN→REFACTOR cycle for each task or logical unit of work.
+     Repeat the RED→GREEN→REFACTOR cycle for each logical unit of work.
 
   4. **MANDATORY — Full test suite run:**
 
@@ -393,7 +363,7 @@ Execute Steps 4a–4h below. In `all` mode or `--headless`: if any step encounte
      - Python: `pytest` (runs ALL tests)
      - If the project has no test infrastructure: run the build command (`dotnet build`, `npm run build`, etc.) to verify compilation.
 
-     **ALL tests must pass (new AND existing).** Do NOT proceed to Step 4f (task resolution) if any test fails. Fix failures first.
+     **ALL tests must pass (new AND existing).** Do NOT proceed to Step 4e (story resolution) if any test fails. Fix failures first.
 
      Capture and store the test results for the summary:
      - `testsPassed`: total number of passing tests
@@ -401,19 +371,17 @@ Execute Steps 4a–4h below. In `all` mode or `--headless`: if any step encounte
      - `testCommand`: the command that was run (e.g., `dotnet test`)
      - `testSuiteStatus`: "all passed" | "failures" | "no test infrastructure"
 
-  5. **Match tasks to work**: As you complete work that corresponds to a specific Azure DevOps task (from `taskTitles`), note which tasks have been completed.
-
-  6. **Handle blockers**:
+  5. **Handle blockers**:
      - Both `single` and `all` mode: make your best judgment call and proceed. Log any assumptions.
      - Only use `AskUserQuestion` (in `single` mode without `--headless`) if the story spec explicitly marks something as "BLOKERER implementation" — this indicates the spec author determined it cannot be resolved without user input.
      - `all` mode or `--headless`: NEVER use `AskUserQuestion`. Make best judgment and continue. Log blockers as skipped.
      - If the story spec has "Open Questions & Blockers": skip items marked as blocking, implement what you can.
 
-  7. **Commit changes**: Tests and implementation should already be committed from the TDD cycles above. If any uncommitted changes remain, commit them with descriptive messages referencing the story ID.
+  6. **Commit changes**: Tests and implementation should already be committed from the TDD cycles above. If any uncommitted changes remain, commit them with descriptive messages referencing the story ID.
 
   IMPORTANT: Do NOT spend time exploring or understanding the codebase broadly. The `/devsprint-plan` command already did that analysis and wrote the story spec. Trust the spec. Only read files that you are about to modify.
 
-  **Step 4e.5 — UI verification (if frontend changes detected):**
+  **Step 4d.5 — UI verification (if frontend changes detected):**
 
   After implementation is complete and all tests pass, check if any frontend/UI files were modified in this branch:
 
@@ -461,33 +429,13 @@ Execute Steps 4a–4h below. In `all` mode or `--headless`: if any step encounte
 
      Report status: `--step "UI verification" --detail "Checking visual output for frontend changes"`
 
-  **Step 4f — Auto-resolve activated tasks:**
+  **Step 4e — Resolve story in Azure DevOps:**
 
-  For each task ID in `activatedTaskIds`:
-  1. Run `node ~/.claude/bin/devsprint-tools.cjs update-state --id {taskId} --state "Resolved" --cwd $CWD`
-  2. Log result.
+  Run `node ~/.claude/bin/devsprint-tools.cjs update-state --id {storyId} --state "Resolved" --cwd $CWD`
+  - If exit 0: Display "Story #{storyId} resolved ✓"
+  - If exit 1: warn but continue (story may already be resolved or in a non-transitionable state).
 
-  Display:
-  ```
-  Task resolution:
-    #{taskId} ({taskTitle}): Resolved ✓
-    #{taskId} ({taskTitle}): Resolved ✓
-  ```
-
-  **Step 4g — Auto-resolve story if all tasks done:**
-
-  Run `node ~/.claude/bin/devsprint-tools.cjs get-child-states --id {storyId} --cwd $CWD`
-  - If `allResolved === true`:
-    Run `node ~/.claude/bin/devsprint-tools.cjs update-state --id {storyId} --state "Resolved" --cwd $CWD`
-    Display: "Story #{storyId} resolved ✓"
-  - If `allResolved === false`:
-    Display remaining open tasks:
-    ```
-    Story #{storyId} still has open tasks:
-      #{childId} -- {childTitle} ({childState})
-    ```
-
-  **Step 4h — Push and create PR:**
+  **Step 4f — Push and create PR:**
 
   Build a PR body string containing:
   ```
@@ -496,10 +444,6 @@ Execute Steps 4a–4h below. In `all` mode or `--headless`: if any step encounte
 
   ## Changes
   {Brief summary of what was implemented, based on the story spec}
-
-  ## Tasks resolved
-  - #{taskId} — {taskTitle}
-  - #{taskId} — {taskTitle}
 
   {If UI screenshot exists at .planning/screenshots/{storyId}.png:}
   ## UI Verification
@@ -524,9 +468,9 @@ Execute Steps 4a–4h below. In `all` mode or `--headless`: if any step encounte
     - `single` mode: warn user. The branch is already pushed — suggest creating PR manually in Azure DevOps.
     - `all` mode: log error. Record "PR not created" and move on.
 
-  Record story outcome: "completed" (with PR URL), "partial" (some tasks remain), or "skipped" (with reason).
+  Record story outcome: "completed" (with PR URL), "partial" (work remains), or "skipped" (with reason).
 
-  **Step 4i — Write to execution log:**
+  **Step 4g — Write to execution log:**
 
   After each story completes (whether completed, partial, or skipped), immediately append the result to the execution log file at `$CWD/.planning/devsprint-execution-log.json`.
 
@@ -544,8 +488,6 @@ Execute Steps 4a–4h below. In `all` mode or `--headless`: if any step encounte
     "baseBranch": "develop",
     "prUrl": "https://...",
     "prId": 123,
-    "tasksResolved": [12346, 12347],
-    "tasksRemaining": [12348],
     "testsPassed": 42,
     "testsFailed": 0,
     "testCommand": "dotnet test",
@@ -572,9 +514,8 @@ This run:
 {for each story in executionResults:}
   {status icon} #{storyId} — {storyTitle}
      Branch: {branchName}
-     Tasks: {resolvedCount}/{totalCount} resolved
      Tests: {testsPassed} passed, {testsFailed} failed ({testCommand}) — {testSuiteStatus}
-     Story: {Resolved ✓ | Active (X tasks remaining)}
+     Story: {Resolved ✓ | Active}
      PR: {prUrl | "not created — {reason}"}
 {end for}
 
@@ -602,7 +543,7 @@ Run `node ~/.claude/bin/devsprint-tools.cjs clear-status --cwd $CWD` to mark the
 
 ```
 Next steps:
-  {If tasks remain: "Run `/devsprint-execute {storyId}` to continue on remaining tasks."}
+  {If status is partial: "Run `/devsprint-execute {storyId}` to retry."}
   {If all resolved: "Review and merge the PRs, then run `/devsprint-sprint` to see updated sprint status."}
 ```
 
@@ -612,7 +553,7 @@ Next steps:
 
 **Common errors and responses:**
 
-- `update-state` returns exit 1 with "invalid state transition": The task may already be in the target state or in a state that doesn't allow the transition (e.g., Closed → Active). Warn but continue. Non-blocking.
+- `update-state` returns exit 1 with "invalid state transition": The story may already be in the target state or in a state that doesn't allow the transition (e.g., Closed → Active). Warn but continue. Non-blocking.
 
 - `update-state` returns 403: "Insufficient permissions. Your PAT may not have `vso.work_write` scope. Regenerate your PAT with `vso.work_write` and run `/devsprint-setup`."
 
@@ -644,19 +585,18 @@ Next steps:
 - `/devsprint-execute` runs all stories autonomously without user prompts
 - Pre-flight status check shows ALL stories with clear status BEFORE execution starts
 - Already-executed stories (from execution log) are skipped automatically
-- Already-resolved stories and tasks (from Azure DevOps) are skipped automatically
+- Already-resolved stories (from Azure DevOps) are skipped automatically
 - Execution log (`devsprint-execution-log.json`) is written after EACH story — survives interruptions
 - Re-running `/devsprint-execute` only processes stories not yet completed
 - Each story gets its own feature branch from develop
-- Tasks are activated before work and resolved after — automatically
-- Stories are resolved when all children are resolved — automatically
+- Stories are resolved automatically after implementation
 - Each story gets a PR linked to the Azure DevOps story
 - In `all` mode: errors on one story do not block the next
 - In `single` mode: user is consulted on blockers
 - Existing test suite is verified green BEFORE any code changes (Step 4b.1)
 - Full test suite (`dotnet test` / `npm test`) runs after implementation — not just new tests
 - Test results (passed/failed counts) are included in the summary output
-- Tasks are NOT resolved if the full test suite has failures
+- Story is NOT resolved if the full test suite has failures
 - Clear summary with PR links and test results at the end
 - UI changes trigger automatic visual verification via screenshot
 - Screenshots are saved as documentation in `.planning/screenshots/`

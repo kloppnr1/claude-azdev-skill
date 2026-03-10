@@ -659,10 +659,25 @@ async function cmdGetWorkItem(cwd, args) {
       throw new Error(`Failed to fetch work item details: HTTP ${batchRes.status}`);
     }
 
+    // Also fetch the primary work item with relations to get attachments
+    const wiRelUrl = `${cfg.org}/${cfg.project}/_apis/wit/workitems/${workItemId}?$expand=relations&api-version=7.1`;
+    const wiRelRes = await makeRequest(wiRelUrl, encodedPat);
+    let attachments = [];
+    if (wiRelRes.status === 200) {
+      const wiRelData = JSON.parse(wiRelRes.body);
+      attachments = (wiRelData.relations || [])
+        .filter(r => r.rel === 'AttachedFile')
+        .map(r => ({
+          name: r.attributes.name,
+          url: r.url,
+          size: r.attributes.resourceSize || 0,
+        }));
+    }
+
     const batchData = JSON.parse(batchRes.body);
     const items = (batchData.value || []).map((item) => {
       const assignedTo = item.fields['System.AssignedTo'];
-      return {
+      const result = {
         id: item.id,
         type: item.fields['System.WorkItemType'],
         title: item.fields['System.Title'],
@@ -673,6 +688,11 @@ async function cmdGetWorkItem(cwd, args) {
         assignedTo: assignedTo ? assignedTo.displayName : null,
         tags: item.fields['System.Tags'] ? item.fields['System.Tags'].split('; ') : [],
       };
+      // Include attachments on the primary work item
+      if (item.id === workItemId && attachments.length > 0) {
+        result.attachments = attachments;
+      }
+      return result;
     });
 
     console.log(JSON.stringify(items));
@@ -681,6 +701,411 @@ async function cmdGetWorkItem(cwd, args) {
     console.error(err.message);
     process.exit(1);
   }
+}
+
+/**
+ * Downloads a binary file from a URL with Azure DevOps auth.
+ * @param {string} url - The URL to download
+ * @param {string} encodedPat - Base64-encoded PAT
+ * @param {string} outputPath - Local file path to write
+ * @returns {Promise<{status: number, size: number}>}
+ */
+function downloadFile(url, encodedPat, outputPath) {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(url);
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || 443,
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: 'GET',
+      headers: {
+        'Authorization': `Basic ${encodedPat}`,
+        'Accept': 'application/octet-stream',
+      },
+    };
+    const req = https.request(options, (res) => {
+      // Follow redirects
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        downloadFile(res.headers.location, encodedPat, outputPath).then(resolve).catch(reject);
+        return;
+      }
+      const dir = path.dirname(outputPath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const fileStream = fs.createWriteStream(outputPath);
+      let size = 0;
+      res.on('data', (chunk) => { size += chunk.length; fileStream.write(chunk); });
+      res.on('end', () => { fileStream.end(); resolve({ status: res.statusCode, size }); });
+    });
+    req.on('error', (err) => reject(new Error(`Download failed: ${err.message}`)));
+    req.end();
+  });
+}
+
+/**
+ * Handles the download-attachment command.
+ * Downloads an attachment from Azure DevOps to a local file.
+ * stdout: JSON {"status":"ok","path":"...","name":"...","size":N}
+ * @param {string} cwd - Working directory
+ * @param {string[]} args - CLI args
+ */
+async function cmdDownloadAttachment(cwd, args) {
+  const urlIdx = args.indexOf('--url');
+  const outputIdx = args.indexOf('--output');
+  const url = urlIdx !== -1 ? args[urlIdx + 1] : null;
+  const outputPath = outputIdx !== -1 ? args[outputIdx + 1] : null;
+
+  if (!url || !outputPath) {
+    console.error('Usage: devsprint-tools.cjs download-attachment --url <attachment-url> --output <local-path> [--cwd <path>]');
+    process.exit(1);
+  }
+
+  try {
+    const cfg = loadConfig(cwd);
+    const encodedPat = Buffer.from(':' + cfg.pat).toString('base64');
+    const result = await downloadFile(url, encodedPat, outputPath);
+    if (result.status !== 200) {
+      throw new Error(`Download failed: HTTP ${result.status}`);
+    }
+    console.log(JSON.stringify({ status: 'ok', path: path.resolve(outputPath), name: path.basename(outputPath), size: result.size }));
+    process.exit(0);
+  } catch (err) {
+    console.error(err.message);
+    process.exit(1);
+  }
+}
+
+/**
+ * Handles the parse-file command.
+ * Extracts text content from binary file formats (.msg, .eml, .docx).
+ * For .msg (Outlook): extracts subject, from, to, date, and body text.
+ * For .eml: extracts headers and body.
+ * For .docx: extracts text from document.xml.
+ * stdout: JSON {"status":"ok","type":"msg|eml|docx|text","subject":"...","from":"...","to":"...","date":"...","body":"..."}
+ * @param {string} cwd - Working directory
+ * @param {string[]} args - CLI args
+ */
+async function cmdParseFile(cwd, args) {
+  const fileIdx = args.indexOf('--file');
+  const filePath = fileIdx !== -1 ? args[fileIdx + 1] : null;
+
+  if (!filePath) {
+    console.error('Usage: devsprint-tools.cjs parse-file --file <path> [--cwd <path>]');
+    process.exit(1);
+  }
+
+  try {
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`File not found: ${filePath}`);
+    }
+
+    const ext = path.extname(filePath).toLowerCase();
+    const buf = fs.readFileSync(filePath);
+
+    if (ext === '.msg') {
+      const result = parseMsgFile(buf);
+      console.log(JSON.stringify({ status: 'ok', type: 'msg', ...result }));
+    } else if (ext === '.eml') {
+      const result = parseEmlFile(buf.toString('utf-8'));
+      console.log(JSON.stringify({ status: 'ok', type: 'eml', ...result }));
+    } else if (ext === '.docx') {
+      const result = parseDocxFile(buf);
+      console.log(JSON.stringify({ status: 'ok', type: 'docx', ...result }));
+    } else {
+      // Plain text fallback
+      const text = buf.toString('utf-8');
+      console.log(JSON.stringify({ status: 'ok', type: 'text', body: text }));
+    }
+    process.exit(0);
+  } catch (err) {
+    console.error(err.message);
+    process.exit(1);
+  }
+}
+
+/**
+ * Parse an Outlook .msg file (OLE Compound Binary File).
+ * Extracts subject, from, to, date, and body from the property streams.
+ */
+function parseMsgFile(buf) {
+  // OLE Compound Binary File Format (CFB) parser — minimal implementation
+  // Reference: [MS-CFB] and [MS-OXMSG]
+  const result = { subject: '', from: '', to: '', date: '', body: '' };
+
+  // Verify OLE magic number
+  if (buf.length < 512 || buf.readUInt32LE(0) !== 0xE011CFD0 || buf.readUInt32LE(4) !== 0xE11AB1A1) {
+    // Not a valid OLE file — try to extract readable strings
+    result.body = extractReadableStrings(buf);
+    return result;
+  }
+
+  try {
+    // Parse CFB header
+    const sectorSize = 1 << buf.readUInt16LE(30); // Usually 512
+    const miniSectorSize = 1 << buf.readUInt16LE(32); // Usually 64
+    const fatSectors = buf.readUInt32LE(44);
+    const firstDirSector = buf.readUInt32LE(48);
+    const miniStreamCutoff = buf.readUInt32LE(56);
+    const firstMiniFatSector = buf.readInt32LE(60);
+    const firstDifatSector = buf.readInt32LE(68);
+
+    // Build FAT (File Allocation Table)
+    const fat = [];
+    // DIFAT entries in header (at offset 76, up to 109 entries)
+    const difatEntries = [];
+    for (let i = 0; i < 109 && i < fatSectors; i++) {
+      difatEntries.push(buf.readUInt32LE(76 + i * 4));
+    }
+    // Read FAT sectors
+    for (const fatSectorIdx of difatEntries) {
+      if (fatSectorIdx >= 0xFFFFFFFE) break;
+      const fatOffset = (fatSectorIdx + 1) * sectorSize;
+      for (let j = 0; j < sectorSize / 4; j++) {
+        fat.push(buf.readUInt32LE(fatOffset + j * 4));
+      }
+    }
+
+    // Read sector chain
+    function readSectorChain(startSector) {
+      const chunks = [];
+      let sector = startSector;
+      let safety = 0;
+      while (sector >= 0 && sector < 0xFFFFFFFE && safety < 10000) {
+        const offset = (sector + 1) * sectorSize;
+        if (offset + sectorSize > buf.length) break;
+        chunks.push(buf.slice(offset, offset + sectorSize));
+        sector = fat[sector] !== undefined ? fat[sector] : 0xFFFFFFFE;
+        safety++;
+      }
+      return Buffer.concat(chunks);
+    }
+
+    // Read directory entries
+    const dirData = readSectorChain(firstDirSector);
+    const entries = [];
+    for (let i = 0; i + 128 <= dirData.length; i += 128) {
+      const nameLen = dirData.readUInt16LE(i + 64);
+      if (nameLen <= 0) continue;
+      const nameBytes = dirData.slice(i, i + nameLen - 2); // UTF-16LE, skip null terminator
+      const name = nameBytes.toString('utf16le');
+      const type = dirData.readUInt8(i + 66);
+      const startSector = dirData.readUInt32LE(i + 116);
+      const size = dirData.readUInt32LE(i + 120);
+      entries.push({ name, type, startSector, size });
+    }
+
+    // Read mini-stream (from root entry)
+    const rootEntry = entries[0];
+    let miniStream = Buffer.alloc(0);
+    if (rootEntry && rootEntry.startSector < 0xFFFFFFFE) {
+      miniStream = readSectorChain(rootEntry.startSector);
+    }
+
+    // Build mini-FAT
+    const miniFat = [];
+    if (firstMiniFatSector >= 0 && firstMiniFatSector < 0xFFFFFFFE) {
+      const miniFatData = readSectorChain(firstMiniFatSector);
+      for (let i = 0; i + 4 <= miniFatData.length; i += 4) {
+        miniFat.push(miniFatData.readUInt32LE(i));
+      }
+    }
+
+    // Read mini-stream chain
+    function readMiniChain(startSector, size) {
+      const chunks = [];
+      let sector = startSector;
+      let remaining = size;
+      let safety = 0;
+      while (sector >= 0 && sector < 0xFFFFFFFE && remaining > 0 && safety < 10000) {
+        const offset = sector * miniSectorSize;
+        const chunkSize = Math.min(miniSectorSize, remaining);
+        if (offset + chunkSize > miniStream.length) break;
+        chunks.push(miniStream.slice(offset, offset + chunkSize));
+        remaining -= chunkSize;
+        sector = miniFat[sector] !== undefined ? miniFat[sector] : 0xFFFFFFFE;
+        safety++;
+      }
+      return Buffer.concat(chunks);
+    }
+
+    // Read entry data (mini-stream if small, regular sectors if large)
+    function readEntryData(entry) {
+      if (entry.size === 0) return Buffer.alloc(0);
+      if (entry.size < miniStreamCutoff) {
+        return readMiniChain(entry.startSector, entry.size);
+      } else {
+        return readSectorChain(entry.startSector).slice(0, entry.size);
+      }
+    }
+
+    // MAPI property IDs for .msg
+    // 0x0037 = Subject, 0x0C1A = SenderName, 0x0E04 = DisplayTo,
+    // 0x0039 = ClientSubmitTime, 0x1000 = Body
+    const propMap = {
+      '__substg1.0_0037001F': 'subject',   // Unicode subject
+      '__substg1.0_0037001E': 'subject',   // ANSI subject
+      '__substg1.0_0C1A001F': 'from',      // Unicode sender
+      '__substg1.0_0C1A001E': 'from',      // ANSI sender
+      '__substg1.0_0E04001F': 'to',        // Unicode display to
+      '__substg1.0_0E04001E': 'to',        // ANSI display to
+      '__substg1.0_1000001F': 'body',      // Unicode body
+      '__substg1.0_1000001E': 'body',      // ANSI body
+      '__substg1.0_1009001E': 'rtfBody',   // RTF compressed body
+    };
+
+    for (const entry of entries) {
+      const lname = entry.name.toLowerCase().replace(/[^\x20-\x7e]/g, '');
+      for (const [pattern, field] of Object.entries(propMap)) {
+        if (lname === pattern || lname.includes(pattern.slice(12))) {
+          if (field === 'rtfBody') continue; // Skip RTF for now
+          try {
+            const data = readEntryData(entry);
+            const isUnicode = entry.name.includes('001F');
+            const text = isUnicode ? data.toString('utf16le') : data.toString('utf-8');
+            const cleaned = text.replace(/\0/g, '').trim();
+            if (cleaned && (!result[field] || cleaned.length > result[field].length)) {
+              result[field] = cleaned;
+            }
+          } catch (e) { /* skip unreadable entries */ }
+        }
+      }
+    }
+
+    // If no body found, try extracting readable strings
+    if (!result.body) {
+      result.body = extractReadableStrings(buf);
+    }
+  } catch (e) {
+    // Fallback: extract readable strings from binary
+    result.body = extractReadableStrings(buf);
+  }
+
+  return result;
+}
+
+/**
+ * Extract readable strings from a binary buffer (fallback for unparseable files).
+ */
+function extractReadableStrings(buf) {
+  // Try UTF-16LE first (common in .msg files)
+  const strings = [];
+  let current = '';
+  for (let i = 0; i + 1 < buf.length; i += 2) {
+    const code = buf.readUInt16LE(i);
+    if (code >= 0x20 && code < 0x7F || code >= 0xC0 && code < 0x2000) {
+      current += String.fromCharCode(code);
+    } else {
+      if (current.length >= 10) strings.push(current);
+      current = '';
+    }
+  }
+  if (current.length >= 10) strings.push(current);
+
+  // Also try ASCII/UTF-8
+  let asciiCurrent = '';
+  for (let i = 0; i < buf.length; i++) {
+    const b = buf[i];
+    if (b >= 0x20 && b < 0x7F) {
+      asciiCurrent += String.fromCharCode(b);
+    } else if (b === 0x0A || b === 0x0D) {
+      asciiCurrent += '\n';
+    } else {
+      if (asciiCurrent.length >= 10) strings.push(asciiCurrent.trim());
+      asciiCurrent = '';
+    }
+  }
+  if (asciiCurrent.length >= 10) strings.push(asciiCurrent.trim());
+
+  // Deduplicate and return longest coherent text
+  const unique = [...new Set(strings)].filter(s => s.trim().length > 10);
+  unique.sort((a, b) => b.length - a.length);
+  return unique.slice(0, 20).join('\n\n');
+}
+
+/**
+ * Parse a .eml (email) file — plain text format.
+ */
+function parseEmlFile(text) {
+  const result = { subject: '', from: '', to: '', date: '', body: '' };
+  const headerEnd = text.indexOf('\r\n\r\n');
+  const splitIdx = headerEnd !== -1 ? headerEnd : text.indexOf('\n\n');
+  const headers = splitIdx !== -1 ? text.substring(0, splitIdx) : '';
+  const body = splitIdx !== -1 ? text.substring(splitIdx).trim() : text;
+
+  const subjectMatch = headers.match(/^Subject:\s*(.+)$/mi);
+  const fromMatch = headers.match(/^From:\s*(.+)$/mi);
+  const toMatch = headers.match(/^To:\s*(.+)$/mi);
+  const dateMatch = headers.match(/^Date:\s*(.+)$/mi);
+
+  if (subjectMatch) result.subject = subjectMatch[1].trim();
+  if (fromMatch) result.from = fromMatch[1].trim();
+  if (toMatch) result.to = toMatch[1].trim();
+  if (dateMatch) result.date = dateMatch[1].trim();
+  result.body = body;
+  return result;
+}
+
+/**
+ * Parse a .docx file — extract text from document.xml inside the ZIP.
+ * DOCX files are ZIP archives containing XML.
+ */
+function parseDocxFile(buf) {
+  const result = { body: '' };
+  const zlib = require('zlib');
+
+  // Minimal ZIP parser — find document.xml entry
+  // ZIP end of central directory record is at end of file
+  let eocdOffset = -1;
+  for (let i = buf.length - 22; i >= 0; i--) {
+    if (buf.readUInt32LE(i) === 0x06054B50) { eocdOffset = i; break; }
+  }
+  if (eocdOffset === -1) { result.body = '(Could not parse .docx — invalid ZIP)'; return result; }
+
+  const centralDirOffset = buf.readUInt32LE(eocdOffset + 16);
+  const centralDirEntries = buf.readUInt16LE(eocdOffset + 10);
+
+  // Parse central directory to find document.xml
+  let offset = centralDirOffset;
+  for (let i = 0; i < centralDirEntries && offset + 46 < buf.length; i++) {
+    if (buf.readUInt32LE(offset) !== 0x02014B50) break;
+    const compMethod = buf.readUInt16LE(offset + 10);
+    const compSize = buf.readUInt32LE(offset + 20);
+    const uncompSize = buf.readUInt32LE(offset + 24);
+    const nameLen = buf.readUInt16LE(offset + 28);
+    const extraLen = buf.readUInt16LE(offset + 30);
+    const commentLen = buf.readUInt16LE(offset + 32);
+    const localHeaderOffset = buf.readUInt32LE(offset + 42);
+    const name = buf.toString('utf-8', offset + 46, offset + 46 + nameLen);
+
+    if (name === 'word/document.xml') {
+      // Read from local file header
+      const lhOffset = localHeaderOffset;
+      if (buf.readUInt32LE(lhOffset) === 0x04034B50) {
+        const lhNameLen = buf.readUInt16LE(lhOffset + 26);
+        const lhExtraLen = buf.readUInt16LE(lhOffset + 28);
+        const dataOffset = lhOffset + 30 + lhNameLen + lhExtraLen;
+        const compData = buf.slice(dataOffset, dataOffset + compSize);
+
+        let xmlText;
+        if (compMethod === 0) {
+          xmlText = compData.toString('utf-8');
+        } else {
+          try {
+            xmlText = zlib.inflateRawSync(compData).toString('utf-8');
+          } catch (e) {
+            result.body = '(Could not decompress .docx content)';
+            return result;
+          }
+        }
+        // Strip XML tags, keep text content
+        result.body = xmlText.replace(/<w:p[^>]*>/g, '\n').replace(/<[^>]+>/g, '').replace(/\n{3,}/g, '\n\n').trim();
+      }
+      break;
+    }
+    offset += 46 + nameLen + extraLen + commentLen;
+  }
+
+  if (!result.body) result.body = '(No document.xml found in .docx)';
+  return result;
 }
 
 /**
@@ -1924,10 +2349,36 @@ async function cmdCreatePr(cwd, args) {
 
     if (prRes.status === 201 || prRes.status === 200) {
       const prData = JSON.parse(prRes.body);
-      const webUrl = `${cfg.org}/${cfg.project}/_git/${encodeURIComponent(repoName)}/pullRequest/${prData.pullRequestId}`;
+      const prId = prData.pullRequestId;
+      const webUrl = `${cfg.org}/${cfg.project}/_git/${encodeURIComponent(repoName)}/pullRequest/${prId}`;
+
+      // Set auto-complete: when PR is merged, transition linked work items to Closed
+      try {
+        const createdById = prData.createdBy && prData.createdBy.id;
+        if (createdById) {
+          const acBody = {
+            autoCompleteSetBy: { id: createdById },
+            completionOptions: {
+              deleteSourceBranch: true,
+              transitionWorkItems: true,
+              mergeStrategy: 'squash',
+            },
+          };
+          const acUrl = `${cfg.org}/${cfg.project}/_apis/git/repositories/${encodeURIComponent(repoName)}/pullrequests/${prId}?api-version=7.1`;
+          const acRes = await makeRequest(acUrl, encodedPat, 'PATCH', acBody);
+          if (acRes.status === 200) {
+            console.error(`Auto-complete enabled: work items transition on merge`);
+          } else {
+            console.error(`Warning: could not enable auto-complete (HTTP ${acRes.status})`);
+          }
+        }
+      } catch (e) {
+        console.error(`Warning: auto-complete setup failed: ${e.message}`);
+      }
+
       console.log(JSON.stringify({
         pr: webUrl,
-        prId: prData.pullRequestId,
+        prId,
         branch,
         base,
         pushed: true,
@@ -2646,9 +3097,17 @@ async function main() {
       cmdClearStatus(cwd);
       break;
 
+    case 'download-attachment':
+      await cmdDownloadAttachment(cwd, cmdArgs);
+      break;
+
+    case 'parse-file':
+      await cmdParseFile(cwd, cmdArgs);
+      break;
+
     default:
       console.error(`Unknown command: ${command}`);
-      console.error('Available commands: save-config, load-config, test, get-sprint, get-sprint-items, get-work-item, get-branch-links, update-description, update-acceptance-criteria, update-state, get-child-states, create-branch, create-pr, find-pr, get-pr, get-pr-threads, show-sprint, list-repos, add-comment, delete-comment, create-work-item, list-teams, get-team-area');
+      console.error('Available commands: save-config, load-config, test, get-sprint, get-sprint-items, get-work-item, get-branch-links, update-description, update-acceptance-criteria, update-state, get-child-states, create-branch, create-pr, find-pr, get-pr, get-pr-threads, show-sprint, list-repos, add-comment, delete-comment, create-work-item, list-teams, get-team-area, download-attachment, parse-file');
       process.exit(1);
   }
 }

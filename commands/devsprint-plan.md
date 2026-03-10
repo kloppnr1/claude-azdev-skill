@@ -49,7 +49,18 @@ devsprint-tools.cjs CLI contracts:
 
   node ~/.claude/bin/devsprint-tools.cjs get-work-item <id> --cwd $CWD
     -> Fetches a single work item by ID with its children (same output format as get-sprint-items)
-    -> stdout: JSON array [{id, type, title, state, description, acceptanceCriteria, parentId, assignedTo, tags}]
+    -> stdout: JSON array [{id, type, title, state, description, acceptanceCriteria, parentId, assignedTo, tags, attachments?}]
+    -> The primary work item may include an "attachments" array: [{name, url, size}]
+    -> exit 0 on success, exit 1 on error
+
+  node ~/.claude/bin/devsprint-tools.cjs download-attachment --url <attachment-url> --output <local-path> --cwd $CWD
+    -> Downloads an attachment from Azure DevOps to a local file (requires auth)
+    -> stdout: JSON {"status":"ok","path":"...","name":"...","size":N}
+    -> exit 0 on success, exit 1 on error
+
+  node ~/.claude/bin/devsprint-tools.cjs parse-file --file <path> --cwd $CWD
+    -> Extracts text from binary files (.msg, .eml, .docx, or plain text fallback)
+    -> stdout: JSON {"status":"ok","type":"msg|eml|docx|text","subject":"...","from":"...","to":"...","date":"...","body":"..."}
     -> exit 0 on success, exit 1 on error
 
   node ~/.claude/bin/devsprint-tools.cjs update-description --id <workItemId> --description "<html>" --cwd $CWD
@@ -168,6 +179,7 @@ Report at these points:
 - Step 2 (all-stories mode only): `--step "Fetching sprint" --detail "Loading sprint metadata"`
 - Step 3 (all-stories mode only): `--step "Loading stories" --detail "Fetching assigned work items"`
 - Step 2 (single-story mode): `--step "Loading story" --detail "Fetching #{storyId}"`
+- Step 2.5/3.6: `--step "Downloading attachments" --detail "Fetching {N} file(s) for #{storyId}"`
 - Step 3.5: `--step "Checking existing" --detail "Checking for previous analysis"`
 - Step 4: `--step "Resolving repo" --detail "Auto-detecting target repo for #{storyId}"`
 - Step 4.5: `--step "Analyzing repo" --detail "Scanning {repoName} for #{storyId}"`
@@ -206,6 +218,22 @@ Run `node ~/.claude/bin/devsprint-tools.cjs get-work-item {targetStoryId} --cwd 
 - For `sprintName`, read it from existing `$CWD/.planning/devsprint-task-map.json` if available, otherwise use "unknown".
 - Skip Step 5 (multi-story summary) and go directly to Step 4.
 
+**Step 2.5 — Download and parse attachments (if any):**
+
+For each story being processed, check if it has an `attachments` array (only available from `get-work-item`, not `get-sprint-items`).
+
+If the story has attachments:
+1. Create the directory `$CWD/.planning/attachments/{storyId}/` if it doesn't exist.
+2. For each attachment:
+   a. Run `node ~/.claude/bin/devsprint-tools.cjs download-attachment --url "{attachment.url}" --output "$CWD/.planning/attachments/{storyId}/{attachment.name}" --cwd $CWD`
+   b. Run `node ~/.claude/bin/devsprint-tools.cjs parse-file --file "$CWD/.planning/attachments/{storyId}/{attachment.name}" --cwd $CWD`
+   c. Store the parsed content (subject, from, to, date, body) alongside the story data. This content is used in Step 4.5 (repo analysis) and Step 5.5 (verification) as additional context for understanding the story.
+3. Display: "Downloaded {N} attachment(s) for #{storyId}: {comma-separated file names}"
+
+For images (.png, .jpg, .gif, .bmp, .svg): skip `parse-file` — instead, use the Read tool to view the image directly during Step 4.5 analysis.
+
+The attachment content is treated as supplementary story context — it should be incorporated into the story spec (STORY.md) under a "## Attached Reference Material" section, summarizing the key information extracted from each attachment.
+
 **If NOT `singleStoryMode`:** Fetch the full sprint:
 Run `node ~/.claude/bin/devsprint-tools.cjs get-sprint --cwd $CWD`.
 - If exit 1: show the error message to the user. Stop.
@@ -238,6 +266,15 @@ For previously analyzed stories: display "#{id} — allerede analyseret, beholde
 If the user passes `--reanalyze` flag in the arguments: re-analyze all stories regardless of existing specs. Parse this flag in Step 0 alongside other arguments.
 
 For stories WITHOUT an existing analysis: proceed normally (no question asked).
+
+**Step 3.6 — Fetch attachments (all-stories mode only):**
+
+In all-stories mode, `get-sprint-items` doesn't return attachment info (it uses the batch API which only returns fields). For each story that will be analyzed (not skipped in Step 3.5), fetch its attachments:
+
+1. Run `node ~/.claude/bin/devsprint-tools.cjs get-work-item {storyId} --cwd $CWD` — the response includes `attachments` on the primary item if any exist.
+2. If the story has attachments, follow the same download+parse flow as Step 2.5.
+
+This adds one API call per story but ensures attachments are available for all modes.
 
 **Story mode detection:**
 
@@ -573,6 +610,19 @@ This is the single source of truth for the story — designed to be readable by 
 {What this story explicitly does NOT cover:}
 - {e.g., "Migration of invoices older than 5 years"}
 - {e.g., "Changes to the self-service frontend — that's a separate story"}
+
+{If the story has attachments with parsed content:}
+## Attached Reference Material
+
+{For each attachment, summarize the key information extracted:}
+
+### {attachment.name}
+{If .msg: "**Email from** {from} **to** {to} — {date}"}
+{If .msg: "**Subject:** {subject}"}
+{Summarize the body content — extract actionable details, requirements, specifications, or context that is relevant to the implementation. Do NOT dump the raw body text — distill it into useful information.}
+
+{If the attachment is an image: "**Screenshot/image** — [description of what the image shows, relevant to the story]"}
+{end if}
 
 ## Tasks (Azure DevOps)
 
