@@ -289,6 +289,7 @@
     width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
   }
   .hist-dot.hd-done { opacity: 0.5; }
+  .hist-dot-label.hd-prev { opacity: 0.45; }
   .hist-dot.hd-last { box-shadow: 0 0 4px currentColor; }
   .hist-row.hist-live {
     background: rgba(67,56,202,0.06); border: 1px solid rgba(67,56,202,0.18);
@@ -972,46 +973,24 @@ function buildHistRow(h, forStoryId) {
     log = log.filter(function(e) { return !e.storyId || e.storyId === forStoryId; });
   }
   if (log.length) {
-    // Show actual recorded steps as badges
+    // Show all recorded steps as labeled badges
     for (var i = 0; i < log.length; i++) {
       var scls = stepColor(log[i].step);
       var isLast = i === log.length - 1;
-      if (isLast) {
-        var lbl = cel('span', 'hist-dot-label ' + scls);
-        lbl.textContent = log[i].step;
-        dotsEl.appendChild(lbl);
-      } else {
-        var col = STEP_COLORS[scls] || '#6b7280';
-        var dot = cel('span', 'hist-dot hd-done');
-        dot.style.background = col;
-        dot.title = log[i].step;
-        dotsEl.appendChild(dot);
-      }
+      var lbl = cel('span', 'hist-dot-label ' + scls + (isLast ? '' : ' hd-prev'));
+      lbl.textContent = log[i].step;
+      dotsEl.appendChild(lbl);
     }
   } else {
     // Fallback: infer from final step (old data without stepLog)
     var steps = isPlan ? PLAN_STEPS : EXEC_STEPS;
     var ci = isPlan ? planI(h.step) : execI(h.step);
-    for (var i = 0; i < steps.length; i++) {
-      var fakeStep = steps[i];
-      var col = STEP_COLORS[stepColor(fakeStep)] || '#6b7280';
-      if (i <= ci) {
-        if (i === ci) {
-          var lbl = cel('span', 'hist-dot-label ' + stepColor(fakeStep));
-          lbl.textContent = steps[i];
-          dotsEl.appendChild(lbl);
-        } else {
-          var dot = cel('span', 'hist-dot hd-done');
-          dot.style.background = col;
-          dot.title = steps[i];
-          dotsEl.appendChild(dot);
-        }
-      } else {
-        var dot = cel('span', 'hist-dot');
-        dot.style.background = 'var(--border)';
-        dot.title = steps[i];
-        dotsEl.appendChild(dot);
-      }
+    for (var i = 0; i <= ci && i < steps.length; i++) {
+      var scls = stepColor(steps[i]);
+      var isLast = i === ci;
+      var lbl = cel('span', 'hist-dot-label ' + scls + (isLast ? '' : ' hd-prev'));
+      lbl.textContent = steps[i];
+      dotsEl.appendChild(lbl);
     }
   }
   r.appendChild(dotsEl);
@@ -1453,6 +1432,9 @@ function updateStoryAgent(d) {
       var liveRow = buildHistRow(liveData, sid);
       liveRow.classList.add('hist-live');
       content.appendChild(liveRow);
+      // Auto-expand detail panel for active stories
+      var detail = document.querySelector('[data-story-detail="' + sid + '"]');
+      if (detail && detail.style.display === 'none') detail.style.display = 'block';
     } else {
       el.style.display = 'none';
     }
