@@ -257,6 +257,17 @@ function getAgentStatus() {
   return readJsonFile(path.join(CWD, '.planning', 'devsprint-agent-status.json'));
 }
 
+function isStoryRunning(storyId) {
+  const status = getAgentStatus();
+  if (!status || !status.active) return false;
+  const sid = String(storyId);
+  // Check multi-story map
+  if (status.active.stories && status.active.stories[sid]) return true;
+  // Check single-story field
+  if (String(status.active.storyId) === sid) return true;
+  return false;
+}
+
 function seedAgentStatus(storyId, step, detail) {
   const statusPath = path.join(CWD, '.planning', 'devsprint-agent-status.json');
   let existing = { active: null, history: [] };
@@ -405,8 +416,18 @@ async function handleRequest(req, res) {
             let body = '';
             req.on('data', c => body += c);
             await new Promise(r => req.on('end', r));
-            const { storyId } = JSON.parse(body);
+            const { storyId, comment } = JSON.parse(body);
             if (!storyId) { res.writeHead(400); res.end(JSON.stringify({ error: 'storyId required' })); return; }
+            if (isStoryRunning(storyId)) { res.writeHead(409); res.end(JSON.stringify({ error: 'Story #' + storyId + ' has an active run' })); return; }
+            // Write user comment to file for the execute command to read
+            const ctxDir = path.join(CWD, '.planning', 'execution-context');
+            const ctxFile = path.join(ctxDir, storyId + '.txt');
+            if (comment && comment.trim()) {
+              fs.mkdirSync(ctxDir, { recursive: true });
+              fs.writeFileSync(ctxFile, comment.trim(), 'utf8');
+            } else {
+              try { fs.unlinkSync(ctxFile); } catch {}
+            }
             seedAgentStatus(storyId, 'Starter', 'Initialiserer execute...');
             const { exec: execFn } = require('child_process');
             const cleanEnv = Object.assign({}, process.env);
@@ -426,6 +447,7 @@ async function handleRequest(req, res) {
             await new Promise(r => req.on('end', r));
             const { storyId: prFixId, prId: prFixPrId, repoName: prFixRepo } = JSON.parse(body);
             if (!prFixId) { res.writeHead(400); res.end(JSON.stringify({ error: 'storyId required' })); return; }
+            if (isStoryRunning(prFixId)) { res.writeHead(409); res.end(JSON.stringify({ error: 'Story #' + prFixId + ' has an active run' })); return; }
             seedAgentStatus(prFixId, 'Starter', 'Initialiserer PR fix...');
             const { exec: prFixExec } = require('child_process');
             const prFixBat = path.join(CWD, '.planning', '_run_prfix.bat');
@@ -446,6 +468,7 @@ async function handleRequest(req, res) {
             await new Promise(r => req.on('end', r));
             const { storyId: planId } = JSON.parse(body);
             if (!planId) { res.writeHead(400); res.end(JSON.stringify({ error: 'storyId required' })); return; }
+            if (isStoryRunning(planId)) { res.writeHead(409); res.end(JSON.stringify({ error: 'Story #' + planId + ' has an active run' })); return; }
             seedAgentStatus(planId, 'Starter', 'Initialiserer analyse...');
             // Clean up stale question/answer files
             const qClean = path.join(CWD, '.planning', 'questions', planId + '.json');

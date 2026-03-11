@@ -93,10 +93,9 @@ devsprint-tools.cjs CLI contracts:
 
 **Step 0 — Parse arguments:**
 
-Check if the user passed a story ID as argument (e.g., `/devsprint-plan 42920` or `/devsprint-plan #42920`).
-- If a numeric ID is provided: set `singleStoryMode = true` and `targetStoryId = <the ID>`.
-- If no argument: set `singleStoryMode = false` (process all assigned stories).
-- If argument is a task ID (not a story), it will be resolved to its parent story in Step 3.
+Check if the user passed a work item ID as argument (e.g., `/devsprint-plan 42920` or `/devsprint-plan #42920`).
+- If a numeric ID is provided: set `singleItemMode = true` and `targetItemId = <the ID>`. The type (story vs task) will be determined in Step 2.
+- If no argument: set `singleItemMode = false` (process all assigned stories).
 
 Check for the `--no-devops-update` flag in the arguments:
 - If present: set `skipDevOpsUpdate = true`. This skips ALL writes to Azure DevOps (description, acceptance criteria, and comments). The local STORY.md spec is still generated normally.
@@ -160,6 +159,25 @@ When running headless, you cannot use `AskUserQuestion`. Instead, use file-based
 
 6. **Non-research stories in headless mode:** For non-research stories where information is sufficient, skip the interactive verification entirely — auto-approve and continue to spec generation. Only write questions if the information completeness check (Step 5.5) identifies missing critical details.
 
+**Step 0.5 — Concurrency guard (per-story lock):**
+
+Only one run (plan, execute, or PR-fix) may be active for a given story at a time. Before proceeding, check the agent status file:
+
+```bash
+cat "$CWD/.planning/devsprint-agent-status.json" 2>/dev/null
+```
+
+If the file exists and has an `active` object (not null), check:
+- If `active.stories` contains a key matching the target `storyId` (in single-story mode), OR
+- If `active.storyId` matches the target `storyId`
+
+Then **abort immediately** with this message:
+> "Story #{storyId} already has an active run (step: {active.stories[storyId].step}). Wait for it to finish before starting another."
+
+In all-stories mode (no specific storyId): skip any story that appears in `active.stories` — do not abort the entire run, just skip that story and log it.
+
+If the agent status has no `active` entry, or the target story is not in it, proceed normally.
+
 **Step 1 — Check prerequisites:**
 
 1. Verify `~/.claude/bin/devsprint-tools.cjs` exists via Bash `test -f ~/.claude/bin/devsprint-tools.cjs`.
@@ -184,11 +202,11 @@ Report at these points:
 - Step 4: `--step "Resolving repo" --detail "Auto-detecting target repo for #{storyId}"`
 - Step 4.5: `--step "Analyzing repo" --detail "Scanning {repoName} for #{storyId}"`
 - Step 5.5: `--step "Verifying understanding" --detail "#{storyId} {short title}"`
-- Step 5.6: `--step "Updating DevOps" --detail "Writing description for #{storyId}"`
+- Step 5.6: `--step "Updating fields" --detail "Writing description for #{storyId}"`
 - Step 8: `--step "Generating spec" --detail "Writing STORY.md for #{storyId}"`
 - Step 10.5: `--step "Self-review" --detail "Validating spec quality for #{storyId}"`
 - Step 11: `--step "Awaiting review" --detail "Presenting #{storyId} for approval"`
-- Step 11.1: `--step "Posting to DevOps" --detail "Adding spec comment to #{storyId}"`
+- Step 11.1: `--step "Posting spec comment" --detail "Adding spec to #{storyId} discussion"`
 - Step 11.5: `--step "Writing task map" --detail "Updating devsprint-task-map.json"`
 
 **CRITICAL — Sub-agent status reporting:**
@@ -202,19 +220,40 @@ Report at these points:
   - Found key files: --step "Analyzing repo" --detail "Mapping code flow for #{storyId}"
   - Checking existing branch: --step "Analyzing repo" --detail "Checking branches for #{storyId}"
   - Writing spec: --step "Generating spec" --detail "Writing STORY.md for #{storyId}"
-  - Updating DevOps: --step "Updating DevOps" --detail "Writing description for #{storyId}"
-  - Posting comment: --step "Posting to DevOps" --detail "Adding spec comment to #{storyId}"
+  - Updating fields: --step "Updating fields" --detail "Writing description for #{storyId}"
+  - Posting comment: --step "Posting spec comment" --detail "Adding spec to #{storyId} discussion"
 ```
 Without this, the dashboard status will go STALE during parallel agent work. Every agent MUST report status.
 
 **Step 2 — Fetch stories:**
 
-**If `singleStoryMode`:** Skip sprint metadata fetch. Fetch the story directly:
-Run `node ~/.claude/bin/devsprint-tools.cjs get-work-item {targetStoryId} --cwd $CWD`.
+**If `singleItemMode`:** Skip sprint metadata fetch. Fetch the work item directly:
+Run `node ~/.claude/bin/devsprint-tools.cjs get-work-item {targetItemId} --cwd $CWD`.
 - If exit 1: show error. Stop.
-- If exit 0: parse the JSON array. Find the story item and its child tasks.
-- If the target ID is a Task (not a User Story), use its `parentId` to find the parent story. Process that parent story.
-- If the story's state is "Resolved", "Closed", or "Done": display "Story #{targetStoryId} is already {state}. Nothing to plan." Stop.
+- If exit 0: parse the JSON array. Find the target item.
+
+**Determine item type and planning scope:**
+
+1. If the target item's `type === "User Story"`: set `planningScope = "story"`, `targetStoryId = targetItemId`. Find child tasks from the response. Continue as story planning.
+
+2. If the target item's `type === "Task"`: the user passed a task ID. Determine what to plan:
+
+   **If `headless = true`:** Default to `planningScope = "task"` (they specifically requested this task). Set `targetTaskId = targetItemId`. Use the task's `parentId` to fetch the parent story for context:
+   ```
+   node ~/.claude/bin/devsprint-tools.cjs get-work-item {parentId} --cwd $CWD
+   ```
+
+   **If `headless = false`:** Ask the user:
+   - Question: "#{targetItemId} is a task under story #{parentId} ({parentStoryTitle}). What do you want to plan?"
+   - Options: "Only this task" / "The whole story"
+   - If "Only this task": set `planningScope = "task"`, `targetTaskId = targetItemId`. Fetch parent story for context.
+   - If "The whole story": set `planningScope = "story"`, `targetStoryId = parentId`. Fetch parent story and its children.
+
+3. **Completed-check depends on scope:**
+   - If `planningScope = "story"` and the story's state is "Resolved", "Closed", or "Done": display "Story #{targetStoryId} is already {state}. Nothing to plan." Stop.
+   - If `planningScope = "task"` and the **task's** state is "Resolved", "Closed", or "Done": display "Task #{targetTaskId} is already {state}. Nothing to plan." Stop.
+   - If `planningScope = "task"` and the task is New/Active but the **parent story** is Resolved: proceed normally. This is the "post-merge fix" scenario — a new task was added to an already-completed story.
+
 - For `sprintName`, read it from existing `$CWD/.planning/devsprint-task-map.json` if available, otherwise use "unknown".
 - Skip Step 5 (multi-story summary) and go directly to Step 4.
 
@@ -234,12 +273,12 @@ For images (.png, .jpg, .gif, .bmp, .svg): skip `parse-file` — instead, use th
 
 The attachment content is treated as supplementary story context — it should be incorporated into the story spec (STORY.md) under a "## Attached Reference Material" section, summarizing the key information extracted from each attachment.
 
-**If NOT `singleStoryMode`:** Fetch the full sprint:
+**If NOT `singleItemMode`:** Fetch the full sprint:
 Run `node ~/.claude/bin/devsprint-tools.cjs get-sprint --cwd $CWD`.
 - If exit 1: show the error message to the user. Stop.
 - If exit 0: parse the JSON. Extract `name` for display.
 
-**Step 3 — Fetch assigned stories (skip if `singleStoryMode`):**
+**Step 3 — Fetch assigned stories (skip if `singleItemMode`):**
 
 Run `node ~/.claude/bin/devsprint-tools.cjs get-sprint-items --me --cwd $CWD`.
 - If exit 1: show the error message to the user. Stop.
@@ -257,9 +296,9 @@ Filter to top-level stories only:
 
 For each story to process, check if it has already been analyzed in a previous session:
 
-1. Check if `$CWD/.planning/devsprint-task-map.json` exists and contains a mapping for this story's ID with a non-null `repoPath`.
-2. If found, check if `{repoPath}/.planning/stories/{storyId}.md` exists.
-3. If BOTH exist (task map entry + spec file): the story has been previously analyzed.
+1. Check if `$CWD/.planning/devsprint-task-map.json` exists and contains a mapping for this item's ID with a non-null `repoPath`. For tasks, also check if the parent story has a mapping.
+2. If found, check if the spec file exists: `{repoPath}/.planning/stories/{id}.md` (where `id` is the story or task ID).
+3. If BOTH exist (task map entry + spec file): the item has been previously analyzed.
 
 For previously analyzed stories: display "#{id} — allerede analyseret, beholder eksisterende spec." and **skip this story entirely** — no repo analysis, no spec generation, no DevOps update. Mark as "kept existing" in the final summary. No prompt needed.
 
@@ -283,11 +322,13 @@ For each story, check its `tags` array (case-insensitive). If tags include `"res
 - **More user involvement** — ask exploratory questions to understand the problem space before converging on a solution
 - **Spec format** — STORY.md includes a "Research Findings" section and the acceptance criteria focus on what to investigate/document rather than what to build
 
-**Step 4 — Ask user for target repo per story:**
+**Step 4 — Resolve target repo:**
 
-For each story to process, auto-detect the target repository. Only ask the user if auto-detection fails.
+For each item to process (story or task), auto-detect the target repository. Only ask the user if auto-detection fails.
 
-1. **Check existing task map first:** If `$CWD/.planning/devsprint-task-map.json` exists, check if this story already has a `repoPath` mapping. If so, use that repo directly — display "#{id} → {repoName} (from task map)" and skip to step 5.
+For tasks (`planningScope = "task"`): first check the parent story's mapping in the task map, since the task inherits its repo.
+
+1. **Check existing task map first:** If `$CWD/.planning/devsprint-task-map.json` exists, check if this item (or its parent story) already has a `repoPath` mapping. If so, use that repo directly — display "#{id} → {repoName} (from task map)" and skip to step 5.
 
 2. **Check if all other stories map to the same repo:** If the task map has other mappings and they ALL point to the same repo, use that repo — display "#{id} → {repoName} (same as other stories)".
 
@@ -350,7 +391,7 @@ Store this analysis per story — it is used in Step 5.5 for the interactive ver
 
 **Step 5 — Show summary and confirm:**
 
-**Skip this step entirely if `singleStoryMode` is true.** Go directly to Step 5.5.
+**Skip this step entirely if `singleItemMode` is true.** Go directly to Step 5.5.
 
 Display summary in this format and continue immediately to Step 5.5 (no confirmation needed):
 ```
@@ -364,10 +405,26 @@ You have {N} stories:
 Analyzing...
 ```
 
-**Step 5.5 — Interactive verification per story:**
+**Step 5.5 — Interactive verification:**
 
-For each story, present the following to the user:
+For each item (story or task), present the following to the user:
 
+**If `planningScope = "task"`:** Present a task-focused verification:
+```
+### #{taskId} — {taskTitle} ({state})
+**Parent story:** #{parentStory.id} — {parentStory.title}
+
+**My understanding:**
+{2-3 sentences summarizing what this specific task requires}
+
+**Target repo:** {repoName} ({repoPath})
+
+**Repo analysis** (from Step 4.5):
+  Key files: {files relevant to this task}
+  {If existing branch found: "Existing branch: {branchName}"}
+```
+
+**If `planningScope = "story"`:** Present the standard story verification:
 ```
 ### #{id} — {title} ({state})
 
@@ -455,13 +512,22 @@ If "No, let me correct it": respond with plain text "Hvad skal rettes?" and STOP
 
 The verified understanding per story is used in later steps for project file generation.
 
-**Step 5.6 — Update story description in Azure DevOps:**
+**Step 5.6 — Update work item description in Azure DevOps:**
 
 **If `skipDevOpsUpdate === true`: skip this entire step.**
 
-For each verified story, **replace** the description with the verified analysis. Azure DevOps keeps revision history, so the original description is not lost.
+For each verified item, **replace** the description with the verified analysis. Azure DevOps keeps revision history, so the original description is not lost.
 
-Construct the new description in HTML (Azure DevOps descriptions use HTML, not markdown):
+**If `planningScope = "task"`:** Update the **task** work item (not the parent story):
+```html
+<b>Opsummering:</b> {verified understanding of this specific task}<br>
+<br>
+<b>Parent story:</b> #{parentStory.id} — {parentStory.title}<br>
+<br>
+<i>Task-analyse verificeret {today's date}</i>
+```
+
+**If `planningScope = "story"`:** Update the **story** work item:
 ```html
 <b>Arbejdstype:</b> {Code change/Manual/operational/Blocked}<br>
 <br>
@@ -475,12 +541,13 @@ Construct the new description in HTML (Azure DevOps descriptions use HTML, not m
 
 Then run:
 ```
-node ~/.claude/bin/devsprint-tools.cjs update-description --id {storyId} --description "{newDescriptionHtml}" --cwd $CWD
+node ~/.claude/bin/devsprint-tools.cjs update-description --id {itemId} --description "{newDescriptionHtml}" --cwd $CWD
 ```
+Where `{itemId}` is the task ID or story ID depending on `planningScope`.
 
 If update fails, warn the user but continue (non-blocking error). The verified understanding is still used locally for file generation.
 
-**Also update the Acceptance Criteria field** with user-friendly criteria (not technical). These should be written so a product owner or tester can verify them without reading code. Use simple HTML:
+**Also update the Acceptance Criteria field** (story scope only — tasks don't have this field in Azure DevOps). Write user-friendly criteria (not technical) so a product owner or tester can verify without reading code. Use simple HTML:
 
 ```html
 <ul>
@@ -503,7 +570,10 @@ node ~/.claude/bin/devsprint-tools.cjs update-acceptance-criteria --id {storyId}
 
 If update fails, warn but continue (non-blocking).
 
-**Step 8 — Generate STORY.md for each story:**
+**Step 8 — Generate spec file:**
+
+**If `planningScope = "task"`:** generate a TASK.md. See **Step 8T** below.
+**Otherwise:** generate a STORY.md as described here.
 
 Use the `Write` tool to create `{repoPath}/.planning/stories/{storyId}.md`. Ensure the directory exists first (create via Bash `mkdir -p "{repoPath}/.planning/stories"` if needed).
 
@@ -643,60 +713,109 @@ Formatting rules:
 - Do NOT include any HTML tags in the generated file.
 - The "Open Questions & Blockers" section must NEVER be empty when the story description mentions unresolved items (e.g., "afklaring af...", "åbent:", "TBD", "TODO").
 
+**Step 8T — Generate TASK.md (only when `planningScope = "task"`):**
+
+Use the `Write` tool to create `{repoPath}/.planning/stories/{taskId}.md`. Same directory as story specs — the ID makes it unique.
+
+A task spec is **focused and concise** — it covers only the single task, not the full story. It references the parent story for broader context.
+
+```markdown
+# #{task.id} — {task.title}
+
+> **Sprint**: {sprintName} | **Repo**: {repoName} | **Parent story**: #{parentStory.id} {parentStory.title} | **State**: {task.state}
+
+## Goal
+
+{One sentence: what is the concrete deliverable when this task is done?}
+
+## Parent Story Context
+
+{2-3 sentences summarizing the parent story's purpose, so the developer understands where this task fits. Extract from parentStory.description.}
+
+## Acceptance Criteria
+
+- [ ] {Specific, testable criterion derived from the task title and parent story context}
+- [ ] {Additional criteria if the task description or parent acceptance criteria add requirements}
+
+## Key Files
+
+{From repo analysis — only files relevant to THIS task, not the full story:}
+- `path/to/File.cs` — {what it does and why it's relevant to this task}
+
+## Implementation Notes
+
+{Concrete technical guidance for this specific task:}
+- {e.g., "Add a new method to ExistingService.cs that calls the Settl API"}
+- {e.g., "Follow the pattern in SimilarFeature.cs for the query structure"}
+
+## Open Questions & Blockers
+
+{Anything unresolved for this specific task:}
+- [ ] {e.g., "API credentials for Settl — where are they stored?"}
+
+{If none: "None — ready for implementation."}
+
+---
+*Generated by /devsprint-plan — {today's date}*
+```
+
+The same CRITICAL RULES apply as for STORY.md: extract specific details, no vague placeholders, concrete file paths from repo analysis.
+
 **Step 10.5 — Self-review before presenting:**
 
-Before showing STORY.md to the user, run it through this checklist. Fix any issues silently before presenting.
+Before showing the spec to the user, run it through this checklist. Fix any issues silently before presenting.
 
 | Check | Pass criteria |
 |-------|--------------|
-| Goal is specific | Contains concrete nouns (file paths, feature names, systems) — not just "implement story" |
+| Goal is specific | Contains concrete nouns (file paths, feature names, systems) — not just "implement task/story" |
 | Acceptance criteria are testable | Each criterion describes an observable outcome, not a vague quality |
 | Key Files lists real paths | Every path was confirmed to exist during repo analysis |
-| Code flow is traced | At least one call chain is documented (A → B → C) |
+| Code flow is traced | At least one call chain is documented (A → B → C). For TASK.md: optional if the task is simple/isolated. |
 | No vague placeholders | No "{TBD}", "relevant files", "as needed", "etc." without specifics |
 | Open Questions captures unknowns | Everything marked "afklaring", "TBD", "TODO" in the source is listed here |
-| Out of Scope is explicit | At least one item, or "N/A — story is self-contained" |
+| Out of Scope is explicit | At least one item, or "N/A — self-contained" (STORY.md only — TASK.md skips this section) |
 | Implementation Notes are actionable | An AI agent reading only this file could start coding without asking questions (except items in Open Questions) |
 
-If a check fails and the information exists (in the story, repo, or verified understanding), fix it. If the information doesn't exist, add it to Open Questions instead of guessing.
+If a check fails and the information exists (in the item, repo, or verified understanding), fix it. If the information doesn't exist, add it to Open Questions instead of guessing.
 
 **Step 11 — Present for approval:**
 
-**If `headless = true`:** Auto-approve the spec. The user can review it later in the dashboard (the spec panel shows STORY.md content). Skip the interactive review and go directly to Step 11.1. The dashboard will show the story as "planned" once the task map is written.
+**If `headless = true`:** Auto-approve the spec. The user can review it later in the dashboard. Skip the interactive review and go directly to Step 11.1.
 
-**If `headless = false`:** After generating STORY.md, show the user the full content:
+**If `headless = false`:** After generating the spec, show the user the full content:
 
-"STORY.md has been written to {repoPath}/.planning/stories/{storyId}.md"
+"Spec written to {repoPath}/.planning/stories/{itemId}.md"
 
-[Show the full STORY.md content]
+[Show the full spec content]
 
 Then display: **"Ændringer?"** and STOP. Wait for the user's free-text reply. This is a simple free-text flow — no `AskUserQuestion`.
 
-- If the user writes changes/corrections: incorporate them, re-write the STORY.md file, **re-present the FULL updated content**, and ask "Ændringer?" again. Repeat until the user is satisfied.
-- If the user says "ok", "nej", "fortsæt", "lgtm", or similar affirmative/continue: keep the file, post spec to Azure DevOps (Step 11.1), then move to next story.
+- If the user writes changes/corrections: incorporate them, re-write the file, **re-present the FULL updated content**, and ask "Ændringer?" again. Repeat until the user is satisfied.
+- If the user says "ok", "nej", "fortsæt", "lgtm", or similar affirmative/continue: keep the file, post spec to Azure DevOps (Step 11.1), then move to next item.
 - If the user says "skip": delete the file. Note the skip in the final summary.
 
 **Step 11.1 — Post spec as Azure DevOps comment:**
 
 **If `skipDevOpsUpdate === true`: skip this entire step.**
 
-After a story is approved, post a **summary** of the STORY.md as an HTML-formatted comment on the work item in Azure DevOps. This makes the spec visible to team members in the Discussion tab.
+After a spec is approved, post a **summary** as an HTML-formatted comment on the work item in Azure DevOps. For tasks, post the comment on the **task** work item (not the parent story).
 
-**Convert STORY.md to an HTML summary** for the comment. Do NOT dump the full markdown — create a clean, structured HTML version with:
-- `<h2>` for the story title
-- `<h3>` for sections (Goal, Acceptance Criteria, Key Files, Blocked Tasks, Out of Scope, Tasks)
+**Convert the spec to an HTML summary** for the comment. Do NOT dump the full markdown — create a clean, structured HTML version with:
+- `<h2>` for the title
+- `<h3>` for sections (Goal, Acceptance Criteria, Key Files, Open Questions)
 - `<ul>/<li>` for lists
-- `<table>` for the key files and tasks tables
+- `<table>` for the key files table
 - `<code>` for file paths and code references
 - `<b>` for emphasis, `<i>` for metadata
-- Skip verbose sections (full Implementation Notes, Architecture details) — those live in the local STORY.md
+- Skip verbose sections (full Implementation Notes, Architecture details) — those live in the local spec file
 
 Run:
 ```
-node ~/.claude/bin/devsprint-tools.cjs add-comment --id {storyId} --text "{htmlSummary}" --cwd $CWD
+node ~/.claude/bin/devsprint-tools.cjs add-comment --id {itemId} --text "{htmlSummary}" --cwd $CWD
 ```
+Where `{itemId}` is the story ID or task ID depending on `planningScope`.
 
-If the comment post fails, warn the user but continue (non-blocking error). The local STORY.md is the source of truth.
+If the comment post fails, warn the user but continue (non-blocking error). The local spec file is the source of truth.
 
 **Step 11.5 — Write devsprint-task-map.json:**
 
@@ -709,10 +828,14 @@ After all repos have been processed (approved or skipped), update the task map f
 
 If the file does not exist, create it fresh.
 
-For each **approved** repo, create a mapping entry:
-- `storyId`: the Azure DevOps story ID (number)
-- `storyTitle`: the story title
+For each **approved** item, create a mapping entry:
+- `storyId`: the Azure DevOps story ID (number). For task-only planning, use the **parent story ID**.
+- `storyTitle`: the story title (parent story title for tasks)
 - `repoPath`: the resolved local repo path (from Step 4)
+- `taskIds`: array of task IDs. For task-only planning, include only the planned task ID.
+- `taskTitles`: object mapping task ID → title. For task-only planning, include only the planned task.
+
+**Task-only planning behavior:** When `planningScope = "task"`, the task map entry uses the parent story as the key (since execution runs per-story). If a mapping for the parent story already exists, merge the new task into its `taskIds`/`taskTitles` — do not overwrite the existing entry.
 
 Write the complete map to `$CWD/.planning/devsprint-task-map.json` using the Write tool:
 ```json
@@ -720,13 +843,13 @@ Write the complete map to `$CWD/.planning/devsprint-task-map.json` using the Wri
   "version": 1,
   "sprintName": "{sprintName from Step 2}",
   "generatedAt": "{ISO timestamp}",
-  "mappings": [ ... entries for approved repos ... ]
+  "mappings": [ ... entries for approved items ... ]
 }
 ```
 
-If all repos were skipped (no approved entries) and no existing file, do NOT write the file.
+If all items were skipped (no approved entries) and no existing file, do NOT write the file.
 
-This file maps stories to their local repo paths for execution.
+This file maps stories/tasks to their local repo paths for execution.
 
 **Step 12 — Final summary:**
 
@@ -749,7 +872,11 @@ Next steps:
   Run `/devsprint-execute {storyId}` to implement a story.
 ```
 
-If `singleStoryMode`: simplify the summary to just show the single story result.
+If `singleItemMode`: simplify the summary to just show the single item result. For tasks, show:
+```
+Task planned:
+  #{taskId} {taskTitle} (under #{parentStoryId}) → {repoPath}/.planning/stories/{taskId}.md (approved)
+```
 
 **Step 12.5 — Clear dashboard status and clean up:**
 
@@ -764,7 +891,10 @@ rm -f "$CWD/.planning/questions/{storyId}.json" "$CWD/.planning/answers/{storyId
 
 After displaying the final summary, show the next step as plain text. Do NOT prompt or use `AskUserQuestion`.
 
-**If `singleStoryMode`** (planned a single story):
+**If `singleItemMode`** and `planningScope = "task"`:
+- Display: "Planning complete. Run `/devsprint-execute {parentStoryId}` to implement the story (includes this task)."
+
+**If `singleItemMode`** and `planningScope = "story"`:
 - Display: "Planning complete. Run `/devsprint-execute {targetStoryId}` to implement."
 
 **If all-stories mode** (planned the full sprint):
@@ -782,7 +912,7 @@ After displaying the final summary, show the next step as plain text. Do NOT pro
 
 - Empty sprint or no assigned stories: Display "No stories assigned to you in the current sprint. Nothing to analyze."
 
-- Story ID not found (single-story mode): Display "Story #{targetStoryId} not found in your current sprint items. Run `/devsprint-sprint` to see your assigned items."
+- Work item ID not found: Display "#{targetItemId} not found. Run `/devsprint-sprint` to see your assigned items."
 
 - Repo path does not exist or has no .git: Warn user and re-ask for repo.
 
@@ -790,17 +920,19 @@ After displaying the final summary, show the next step as plain text. Do NOT pro
 
 <success_criteria>
 - Single-story mode: `/devsprint-plan 42920` processes only story #42920 without multi-story summary
+- Single-task mode: `/devsprint-plan 42934` detects the item is a Task, asks user whether to plan the task or its parent story (headless defaults to task-only)
+- Task-only planning generates a focused TASK.md (lighter than STORY.md) with parent story context
 - All-stories mode: `/devsprint-plan` (no args) processes all assigned stories as before
-- Task/child ID argument resolves to parent story automatically
 - Repo is auto-detected from task map or parent directory; user is only asked when auto-detection fails
 - Repo choice is stored in devsprint-task-map.json for use during execution
-- Each story's analysis is shown to the user (Step 5.5) — non-research stories continue automatically, research stories use interactive dialogue
-- Verified analysis replaces the story description in Azure DevOps (Step 5.6)
-- STORY.md contains specific, concrete details (file paths, class names, contacts, blockers) — not generic placeholders
-- Open questions and blockers from the story description are explicitly captured
+- Each item's analysis is shown to the user (Step 5.5) — non-research items continue automatically, research stories use interactive dialogue
+- Verified analysis replaces the description in Azure DevOps (Step 5.6)
+- Spec files contain specific, concrete details (file paths, class names, contacts, blockers) — not generic placeholders
+- Open questions and blockers from the description are explicitly captured
 - Stories are correctly categorized by work type (code change vs manual/operational vs blocked)
-- User can review and request changes to STORY.md via free-text flow (no AskUserQuestion)
+- User can review and request changes to specs via free-text flow (no AskUserQuestion)
 - No HTML artifacts appear in any generated file
 - devsprint-task-map.json merges with existing entries (does not overwrite unrelated stories)
+- Task-only planning merges into the parent story's task map entry (does not create a separate mapping)
 - Task IDs in the map can be used to update status (New → Active → Resolved) during execution
 </success_criteria>

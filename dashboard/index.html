@@ -506,8 +506,24 @@
   .spec-body th, .spec-body td { padding: 6px 10px; border: 1px solid var(--border); text-align: left; }
   .spec-body th { background: var(--bg2); font-weight: 600; color: var(--text); }
   .spec-body blockquote { border-left: 3px solid var(--indigo); padding: 4px 12px; margin: 8px 0; color: var(--dim); }
+  .spec-comment-area {
+    padding: 0 20px 12px; border-top: 1px solid var(--border);
+  }
+  .spec-comment-label {
+    font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--dim);
+    margin: 10px 0 6px; display: block;
+  }
+  .spec-comment-input {
+    width: 100%; min-height: 52px; max-height: 120px; resize: vertical;
+    font-family: var(--sans); font-size: 12px; line-height: 1.5;
+    padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text);
+    outline: none; transition: border-color 0.2s;
+  }
+  .spec-comment-input:focus { border-color: var(--indigo); }
+  .spec-comment-input::placeholder { color: var(--mute); }
   .spec-footer {
-    padding: 12px 20px; border-top: 1px solid var(--border);
+    padding: 12px 20px; border-top: none;
     display: flex; justify-content: flex-end; gap: 8px;
   }
   .btn-launch {
@@ -668,7 +684,7 @@
 <script>
 let S = { sprint:null, git:[], pr:[], map:null, exec:null, agent:null };
 
-const F = url => fetch(url).then(r => r.ok ? r.json() : Promise.reject(r.status));
+const F = (url, opts) => fetch(url, opts).then(r => r.ok ? r.json() : Promise.reject(r.status));
 const E = s => s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : '';
 const D = d => { if(!d)return''; const t=new Date(d); return t.toLocaleDateString('da-DK',{day:'numeric',month:'short'})+' '+t.toLocaleTimeString('da-DK',{hour:'2-digit',minute:'2-digit'}); };
 const AGO = d => { if(!d)return''; const s=Math.floor((Date.now()-new Date(d).getTime())/1000); if(s<60)return'nu'; if(s<3600)return Math.floor(s/60)+'m siden'; if(s<86400)return Math.floor(s/3600)+'t siden'; return Math.floor(s/86400)+'d siden'; };
@@ -710,7 +726,13 @@ function stepColor(s) {
   return 'st-load';
 }
 
+let _lastAgentRenderKey = '';
 function renderAgent(d) {
+  // Skip DOM work if nothing changed
+  const renderKey = JSON.stringify(d && d.active ? { s: d.active.storyId, step: d.active.step, detail: d.active.detail, stories: d.active.stories, updatedAt: d.active.updatedAt } : null);
+  if (renderKey === _lastAgentRenderKey) return;
+  _lastAgentRenderKey = renderKey;
+
   const banner = document.getElementById('agent-banner');
   const pulse = document.getElementById('ab-pulse');
   const label = document.getElementById('ab-label');
@@ -879,13 +901,28 @@ function openSpecPanel(storyId, title, readOnly) {
   const cancelBtn = cel('button', 'btn-cancel', 'Close');
   cancelBtn.onclick = function() { overlay.remove(); };
   footer.appendChild(cancelBtn);
+  var commentArea = null;
   if (!readOnly) {
+    commentArea = cel('div', 'spec-comment-area');
+    var commentLabel = cel('label', 'spec-comment-label', 'Message to agent (optional)');
+    var commentInput = document.createElement('textarea');
+    commentInput.className = 'spec-comment-input';
+    commentInput.placeholder = 'E.g. "Skip task #42913" or "Use the existing PriceService pattern"';
+    commentArea.appendChild(commentLabel);
+    commentArea.appendChild(commentInput);
+    panel.appendChild(commentArea);
+
     const launchBtn = cel('button', 'btn-launch', '\u25B6 Start execution');
     launchBtn.disabled = true;
     launchBtn.onclick = function() {
+      if (isStoryBusy(storyId)) { showBusyToast(storyId); return; }
       launchBtn.disabled = true; launchBtn.textContent = 'Starting\u2026';
-      fetch('/api/execute', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({storyId: storyId}) })
-        .then(r => r.json()).then(() => { launchBtn.textContent = 'Started \u2713'; setTimeout(() => overlay.remove(), 1000); })
+      var payload = {storyId: storyId};
+      var comment = commentInput.value.trim();
+      if (comment) payload.comment = comment;
+      fetch('/api/execute', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+        .then(r => { if (handleRunError(r, storyId)) throw new Error('busy'); return r.json(); })
+        .then(() => { launchBtn.textContent = 'Started \u2713'; setTimeout(() => overlay.remove(), 1000); })
         .catch(() => { launchBtn.disabled = false; launchBtn.textContent = '\u25B6 Start execution'; });
     };
     footer.appendChild(launchBtn);
@@ -903,37 +940,56 @@ function openSpecPanel(storyId, title, readOnly) {
     .catch(() => { body.textContent = 'No plan found. Run /devsprint-plan ' + storyId + ' first.'; });
 }
 
+/* ── Per-story run lock (max 1 concurrent run per story) ── */
+function isStoryBusy(storyId) {
+  if (!S.agent || !S.agent.active) return false;
+  var a = S.agent.active;
+  if (a.stories && a.stories[String(storyId)]) return true;
+  if (String(a.storyId) === String(storyId)) return true;
+  return false;
+}
+function showBusyToast(storyId) {
+  var toast = cel('div', '');
+  toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--amber);color:#1a1a2e;padding:10px 24px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:600;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,0.15);';
+  toast.textContent = '#' + storyId + ' has an active run — wait for it to finish';
+  document.body.appendChild(toast);
+  setTimeout(function() { toast.remove(); }, 3000);
+}
+function handleRunError(r, storyId) {
+  if (r.status === 409) { showBusyToast(storyId); return true; }
+  return false;
+}
+
 /* ── Plan launch + question/answer flow ── */
 var _activePlans = {};
 function launchPlan(storyId, title) {
-  if (_activePlans[storyId]) return;
+  if (_activePlans[storyId] || isStoryBusy(storyId)) { showBusyToast(storyId); return; }
   _activePlans[storyId] = true;
   fetch('/api/plan', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({storyId: storyId}) })
-    .then(r => r.json())
+    .then(r => { if (handleRunError(r, storyId)) { delete _activePlans[storyId]; throw new Error('busy'); } return r.json(); })
     .then(() => {
-      // Brief toast notification
-      const toast = cel('div', '');
+      var toast = cel('div', '');
       toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--cyan);color:#fff;padding:10px 24px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:600;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,0.15);';
       toast.textContent = 'Analysis started for #' + storyId;
       document.body.appendChild(toast);
-      setTimeout(() => { toast.remove(); delete _activePlans[storyId]; }, 3000);
+      setTimeout(function() { toast.remove(); delete _activePlans[storyId]; }, 3000);
     })
     .catch(() => { delete _activePlans[storyId]; });
   return;
 }
 
-const _activePrFix = {};
+var _activePrFix = {};
 function launchPrFix(storyId, prId, repoName) {
-  if (_activePrFix[storyId]) return;
+  if (_activePrFix[storyId] || isStoryBusy(storyId)) { showBusyToast(storyId); return; }
   _activePrFix[storyId] = true;
   fetch('/api/pr-fix', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({storyId: storyId, prId: prId, repoName: repoName}) })
-    .then(r => r.json())
+    .then(r => { if (handleRunError(r, storyId)) { delete _activePrFix[storyId]; throw new Error('busy'); } return r.json(); })
     .then(() => {
-      const toast = cel('div', '');
+      var toast = cel('div', '');
       toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--blue);color:#fff;padding:10px 24px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:600;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,0.15);';
       toast.textContent = 'PR-fix started for #' + storyId;
       document.body.appendChild(toast);
-      setTimeout(() => { toast.remove(); delete _activePrFix[storyId]; }, 3000);
+      setTimeout(function() { toast.remove(); delete _activePrFix[storyId]; }, 3000);
     })
     .catch(() => { delete _activePrFix[storyId]; });
 }
@@ -1534,9 +1590,15 @@ function renderMain() {
 }
 
 /* ── Story-level agent updates (5s poll, DOM only) ── */
+let _lastStoryAgentKey = '';
 function updateStoryAgent(d) {
+  // Skip DOM work if nothing changed
   const a = d && d.active;
   const storyMap = a && a.stories ? a.stories : {};
+  const saKey = JSON.stringify({ ids: Object.keys(storyMap), sid: a ? a.storyId : null, step: a ? a.step : null, stories: storyMap });
+  if (saKey === _lastStoryAgentKey) return;
+  _lastStoryAgentKey = saKey;
+
   const activeIds = new Set(Object.keys(storyMap).map(Number));
   // Fallback: if no stories map but single storyId, use that
   if (activeIds.size === 0 && a && a.storyId) activeIds.add(a.storyId);

@@ -75,6 +75,23 @@ Extract from the arguments:
 
 If storyId is missing, display usage: "Usage: `/devsprint-pr-fix <story-id>`" and stop.
 
+**Step 1.5 — Concurrency guard (per-story lock):**
+
+Only one run (plan, execute, or PR-fix) may be active for a given story at a time. Before proceeding, check the agent status file:
+
+```bash
+cat "$CWD/.planning/devsprint-agent-status.json" 2>/dev/null
+```
+
+If the file exists and has an `active` object (not null), check:
+- If `active.stories` contains a key matching the `storyId`, OR
+- If `active.storyId` matches the `storyId`
+
+Then **abort immediately** with this message:
+> "Story #{storyId} already has an active run (step: {active.stories[storyId].step}). Wait for it to finish before starting another."
+
+If the agent status has no `active` entry, or the story is not in it, proceed normally.
+
 **Step 2 — Check prerequisites:**
 
 1. Verify `~/.claude/bin/devsprint-tools.cjs` exists.

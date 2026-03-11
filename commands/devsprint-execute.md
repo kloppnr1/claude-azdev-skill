@@ -1,7 +1,7 @@
 ---
 name: devsprint-execute
-description: Execute story plans and update Azure DevOps story status automatically
-argument-hint: "[story-id]"
+description: Execute story or task plans and update Azure DevOps status automatically
+argument-hint: "[story-id or task-id]"
 allowed-tools:
   - Read
   - Write
@@ -23,10 +23,11 @@ When the user needs to provide open-ended feedback or corrections, respond with 
 </context_rule>
 
 <objective>
-Execute one or all stories from the task map. For each story: create a feature branch, implement the work from the story spec, auto-resolve the story in Azure DevOps, push, and create a PR.
+Execute one or all stories/tasks from the task map. For each item: create a feature branch, implement the work from the spec, auto-resolve in Azure DevOps, push, and create a PR.
 
 **Mode depends on arguments:**
 - With story ID (`/devsprint-execute 42920`): single-story mode — interactive, can ask user questions on blockers.
+- With task ID (`/devsprint-execute 42934`): single-task mode — only implements that specific task. Detects task vs story by checking if a task spec (`{taskId}.md`) exists, or by fetching the work item type from Azure DevOps.
 - Without arguments (`/devsprint-execute`): all-stories mode — autonomous loop, never asks questions, skips blockers and moves to next story.
 </objective>
 
@@ -104,14 +105,39 @@ devsprint-task-map.json structure (written by /devsprint-plan):
 
 **Step 1 — Parse arguments and determine mode:**
 
-Check if the user passed a story ID as argument (e.g., `/devsprint-execute 42920` or `/devsprint-execute #42920`).
+Check if the user passed a work item ID as argument (e.g., `/devsprint-execute 42920` or `/devsprint-execute #42920`).
 
-- If a numeric ID is provided: `mode = "single"`, `targetStoryId = <the ID>`.
+- If a numeric ID is provided: `mode = "single"`, `targetItemId = <the ID>`. The type (story vs task) is determined in Step 3c.
 - If no argument: `mode = "all"`.
 
 Check for the `--headless` flag in the arguments:
 - If present: set `headless = true`. This makes single-story mode fully autonomous (same as all-stories mode) — no `AskUserQuestion`, blockers are logged and skipped. Used by the dashboard to spawn execution in the background.
 - If not present: set `headless = false` (default).
+
+**Check for user comment (headless mode only):**
+
+When `headless = true` and a `targetItemId` is set, check if the user sent a comment from the dashboard:
+
+```bash
+cat "$CWD/.planning/execution-context/{targetItemId}.txt" 2>/dev/null
+```
+
+If the file exists and has content: store the text as `userComment`. This is a free-text instruction from the user that MUST be respected during execution. Common examples:
+- "Skip task #42913" — do not implement that specific task
+- "Use the existing PriceService pattern" — architectural guidance
+- "Only do the backend, skip frontend tasks" — scope limitation
+- "Deploy to staging after commit" — post-implementation instruction
+
+The `userComment` must be passed into every sub-agent prompt as additional context:
+```
+USER COMMENT: {userComment}
+Respect this instruction throughout execution.
+```
+
+After reading, delete the file to prevent it from affecting future runs:
+```bash
+rm -f "$CWD/.planning/execution-context/{targetItemId}.txt"
+```
 
 **Behavioral rules by mode:**
 - `single` mode (default): mostly autonomous. The agent makes best judgment calls on blockers and continues. Only uses `AskUserQuestion` if the story spec explicitly marks something as "BLOKERER implementation". Stop on critical errors.
@@ -119,6 +145,25 @@ Check for the `--headless` flag in the arguments:
 - `all` mode: fully autonomous. The agent does NOT use `AskUserQuestion` at any point. If you encounter a blocker on one story, log the error and move on to the next story. The user expects to walk away and come back to completed work.
 
 **Context isolation:** In both modes, each story runs inside its own Agent to keep the main conversation lightweight and prevent context exhaustion. The orchestrator only handles pre-flight checks, agent launching, log writing, and the final summary.
+
+**Step 1.5 — Concurrency guard (per-story lock):**
+
+Only one run (plan, execute, or PR-fix) may be active for a given story at a time. Before proceeding, check the agent status file:
+
+```bash
+cat "$CWD/.planning/devsprint-agent-status.json" 2>/dev/null
+```
+
+If the file exists and has an `active` object (not null), check:
+- If `active.stories` contains a key matching the target `storyId` (in single mode), OR
+- If `active.storyId` matches the target `storyId`
+
+Then **abort immediately** with this message:
+> "Story #{storyId} already has an active run (step: {active.stories[storyId].step}). Wait for it to finish before starting another."
+
+In `all` mode (no specific storyId): skip any story that appears in `active.stories` — do not abort the entire run, just skip that story and log it.
+
+If the agent status has no `active` entry, or the target story is not in it, proceed normally.
 
 **Step 2 — Check prerequisites:**
 
@@ -144,6 +189,8 @@ Structure:
   "executions": [
     {
       "storyId": 12345,
+      "taskId": null,
+      "executionScope": "story",
       "status": "completed",
       "branch": "feature/12345-...",
       "prUrl": "https://...",
@@ -151,10 +198,21 @@ Structure:
       "testsFailed": 0,
       "testSuiteStatus": "all passed",
       "completedAt": "2025-01-15T12:00:00.000Z"
+    },
+    {
+      "storyId": 12345,
+      "taskId": 12346,
+      "executionScope": "task",
+      "status": "completed",
+      "branch": "feature/12346-...",
+      "prUrl": "https://...",
+      "completedAt": "2025-01-16T09:00:00.000Z"
     }
   ]
 }
 ```
+
+Note: a story can have both a story-level entry AND multiple task-level entries. This happens when a story is executed, then later individual tasks are added and executed separately (post-merge fix scenario).
 
 If the file doesn't exist, initialize as `{"executions": []}`. Store as `executionLog`.
 
@@ -213,9 +271,33 @@ Summary: {pendingCount} to execute, {completedCount} already done, {skippedCount
 **Step 3c — Select stories to execute:**
 
 If `mode === "single"`:
-- Find the mapping where `storyId` matches `targetStoryId`. If not found: "Story #{targetStoryId} is not in the task map. Available stories: {list}." Stop.
-- If the story is `already-executed` or `already-resolved`: display "Story #{targetStoryId} already completed. Use `--force` to re-execute." and stop. No prompt needed.
-- Store as a single-item list: `storiesToExecute = [matching mapping]`.
+
+**Determine if the ID is a story or task:**
+
+1. First check: does a spec file exist at `{repoPath}/.planning/stories/{targetItemId}.md` for any mapping in the task map? If yes, the spec tells you the type:
+   - If the spec header contains `**Parent story**:`: it's a **task spec**. Set `executionScope = "task"`, `targetTaskId = targetItemId`. Extract the parent story ID from the spec. Find the task map mapping using the parent story ID.
+   - Otherwise: it's a **story spec**. Set `executionScope = "story"`, `targetStoryId = targetItemId`. Find the mapping normally.
+
+2. If no spec file found: check if `targetItemId` matches a `storyId` in the task map directly. If yes: `executionScope = "story"`.
+
+3. If still not found: check if `targetItemId` appears in any mapping's `taskIds` array. If yes: `executionScope = "task"`, use that mapping's `storyId` as the parent.
+
+4. If still not found: fetch the work item from Azure DevOps (`get-work-item {targetItemId}`) and check its type. If it's a Task, use its `parentId` to find the mapping. If it's a Story, look for it in the task map.
+
+5. If the mapping is still not found: "#{targetItemId} is not in the task map. Available stories: {list}." Stop.
+
+**Completed-check depends on scope:**
+
+- If `executionScope = "story"`:
+  - If the story is `already-executed` or `already-resolved`: display "#{targetItemId} already completed. Use `--force` to re-execute." and stop.
+
+- If `executionScope = "task"`:
+  - Check the **task's** state in Azure DevOps (not the parent story). The parent story may be Resolved while this new task is still New/Active.
+  - If the **task** is Resolved/Closed/Done: display "Task #{targetTaskId} already completed." and stop.
+  - If the task is New or Active: proceed — even if the parent story is Resolved. This is the "post-merge fix" scenario where a new task is added to an already-completed story.
+  - Check the execution log for an entry with matching `taskId` (not just `storyId`). Only skip if a task-level entry exists with status "completed".
+
+- Store as a single-item list: `storiesToExecute = [matching mapping]`. Also store `executionScope` and `targetTaskId` (if task mode).
 
 If `mode === "all"`:
 - Only include stories classified as `pending` or `partial`.
@@ -239,19 +321,23 @@ For each mapping in `storiesToExecute` (index `i`, starting at 1):
 
 Display:
 ```
+{If executionScope = "task":}
+━━━ [{i}/{total}] Task #{targetTaskId} — {taskTitle} (under #{storyId}) ━━━
+{Else:}
 ━━━ [{i}/{total}] Story #{storyId} — {storyTitle} ━━━
 ```
 
 Launch an Agent with the full execution instructions for this single story (Steps 4a–4h). The agent prompt must include:
 - **CRITICAL context rule: NEVER mention context usage, context limits, or suggest starting a new session. NEVER offer to "save findings for later" or "continue in a new session". Auto-compact handles context automatically — just keep working.**
-- The story mapping (storyId, storyTitle, repoPath)
-- The path to the story spec: `{repoPath}/.planning/stories/{storyId}.md`
+- The story/task mapping (storyId, storyTitle, repoPath) and `executionScope` ("story" or "task")
+- If `executionScope = "task"`: the `targetTaskId` and the path to the task spec: `{repoPath}/.planning/stories/{targetTaskId}.md`
+- If `executionScope = "story"`: the path to the story spec: `{repoPath}/.planning/stories/{storyId}.md`
 - The path to the config: `$CWD/.planning/devsprint-config.json`
 - All devsprint-tools.cjs CLI contracts needed (update-state, create-branch, create-pr)
 - The TDD workflow (RED → GREEN → REFACTOR)
 - Instruction to verify the FULL test suite passes BEFORE writing any code (baseline check on base branch). If tests fail, skip the story.
 - Instruction to run the FULL test suite (`dotnet test` / `npm test` / `pytest`) after all implementation — not just new tests. All tests must pass before resolving the story.
-- Instruction to return a JSON summary: `{"storyId": N, "status": "completed|partial|skipped", "branch": "...", "prUrl": "...", "testsPassed": N, "testsFailed": N, "testCommand": "...", "testSuiteStatus": "all passed|failures|no test infrastructure", "uiVerified": true|false, "screenshotPath": ".planning/screenshots/{storyId}.png"|null, "error": "..."}`
+- Instruction to return a JSON summary: `{"storyId": N, "taskId": N|null, "executionScope": "story|task", "status": "completed|partial|skipped", "branch": "...", "prUrl": "...", "testsPassed": N, "testsFailed": N, "testCommand": "...", "testSuiteStatus": "all passed|failures|no test infrastructure", "uiVerified": true|false, "screenshotPath": ".planning/screenshots/{itemId}.png"|null, "error": "..."}`
 - **Dashboard status reporting** — the agent MUST report its progress to the dashboard at each major step by running:
   `node ~/.claude/bin/devsprint-tools.cjs report-status --story-id {storyId} --story-title "{storyTitle}" --step "<step>" --detail "<detail>" --repo "{repoName}" --cwd $CWD`
   Report status at these points:
@@ -259,8 +345,8 @@ Launch an Agent with the full execution instructions for this single story (Step
   - Step 4b: `--step "Loading story spec" --detail "Reading {storyId}.md"`
   - Step 4b.1: `--step "Running baseline tests" --detail "{testCommand}" --command "{testCommand}"`
   - Step 4c: `--step "Creating feature branch" --detail "feature/{storyId}-..." --branch "feature/{storyId}-..."`
-  - Step 4d (RED): `--step "Writing tests (RED)" --detail "Writing failing tests"`
-  - Step 4d (GREEN): `--step "Implementing (GREEN)" --detail "Making tests pass"`
+  - Step 4d: `--step "Writing tests" --detail "Adding test cases"`
+  - Step 4d: `--step "Implementing" --detail "Writing implementation code"`
   - Step 4d (full suite): `--step "Running full test suite" --detail "{testCommand}" --command "{testCommand}"`
   - Step 4d.5: `--step "UI verification" --detail "Checking visual output for frontend changes"`
   - Step 4e: `--step "Resolving story" --detail "Setting story to Resolved in Azure DevOps"`
@@ -277,21 +363,33 @@ Steps 4a–4h below describe the work the agent performs:
 
 Execute Steps 4a–4h below. In `all` mode or `--headless`: if any step encounters a non-fatal error, log it and continue to the next step. In `single` mode (not headless): stop on errors and consult the user via `AskUserQuestion`.
 
-  **Step 4a — Check story state:**
+  **Step 4a — Check work item state:**
 
-  Run `node ~/.claude/bin/devsprint-tools.cjs get-sprint-items --me --cwd $CWD` and find the item matching `storyId`.
+  Run `node ~/.claude/bin/devsprint-tools.cjs get-sprint-items --me --cwd $CWD` and find the relevant item.
 
+  **If `executionScope = "task"`:**
+  - Find the item matching `targetTaskId`. Check the **task's** state (not the parent story).
+  - If the task state is "Resolved", "Closed", or "Done": log "Task #{targetTaskId} already resolved — skipping", record as "skipped — already resolved", continue to next.
+  - If the parent story is Resolved but the task is New/Active: proceed normally. This is expected in the "post-merge fix" scenario.
+
+  **If `executionScope = "story"`:**
+  - Find the item matching `storyId`.
   - If the story state is "Resolved", "Closed", or "Done": log "Story #{storyId} already resolved — skipping", record as "skipped — already resolved", continue to next story.
-  - Otherwise: proceed with execution.
 
-  **Step 4b — Load story spec:**
+  Otherwise: proceed with execution.
 
-  1. Read `{repoPath}/.planning/stories/{storyId}.md` using the Read tool.
+  **Step 4b — Load spec:**
+
+  Determine which spec file to load:
+  - If `executionScope = "task"`: read `{repoPath}/.planning/stories/{targetTaskId}.md`
+  - If `executionScope = "story"`: read `{repoPath}/.planning/stories/{storyId}.md`
+
+  1. Read the spec file using the Read tool.
      If missing:
-     - `single` mode: tell user "No story spec found. Run `/devsprint-plan {storyId}` to generate it." Stop.
-     - `all` mode: log error, record as "skipped — no story spec", continue to next story.
+     - `single` mode: tell user "No spec found. Run `/devsprint-plan {targetItemId}` to generate it." Stop.
+     - `all` mode: log error, record as "skipped — no spec", continue to next story.
 
-  2. Parse the story spec — it contains goal, acceptance criteria, technical context (key files, architecture), and implementation notes. This is your single source of truth for the implementation.
+  2. Parse the spec — it contains goal, acceptance criteria, technical context (key files), and implementation notes. This is your single source of truth for the implementation. A task spec is focused on a single task; a story spec covers the full story.
 
   **Step 4b.1 — MANDATORY: Verify existing test suite passes BEFORE any code changes:**
 
@@ -310,7 +408,11 @@ Execute Steps 4a–4h below. In `all` mode or `--headless`: if any step encounte
 
   **Step 4c — Create feature branch:**
 
-  Run: `node ~/.claude/bin/devsprint-tools.cjs create-branch --repo {repoPath} --story-id {storyId} --title "{storyTitle}"`
+  Determine the branch name based on scope:
+  - If `executionScope = "task"`: use `--story-id {targetTaskId}` and the task title
+  - If `executionScope = "story"`: use `--story-id {storyId}` and the story title
+
+  Run: `node ~/.claude/bin/devsprint-tools.cjs create-branch --repo {repoPath} --story-id {itemId} --title "{itemTitle}"`
 
   - If exit 0: parse JSON. Store `branch` as `branchName` and `base` as `baseBranch`.
     - If `created === true`: "Created branch {branch} from {base}"
@@ -429,11 +531,17 @@ Execute Steps 4a–4h below. In `all` mode or `--headless`: if any step encounte
 
      Report status: `--step "UI verification" --detail "Checking visual output for frontend changes"`
 
-  **Step 4e — Resolve story in Azure DevOps:**
+  **Step 4e — Resolve work item in Azure DevOps:**
 
-  Run `node ~/.claude/bin/devsprint-tools.cjs update-state --id {storyId} --state "Resolved" --cwd $CWD`
-  - If exit 0: Display "Story #{storyId} resolved ✓"
-  - If exit 1: warn but continue (story may already be resolved or in a non-transitionable state).
+  Determine which item to resolve:
+  - If `executionScope = "task"`: resolve the **task** (not the parent story — the story may have other tasks still pending).
+    Run `node ~/.claude/bin/devsprint-tools.cjs update-state --id {targetTaskId} --state "Resolved" --cwd $CWD`
+    - If exit 0: Display "Task #{targetTaskId} resolved"
+  - If `executionScope = "story"`: resolve the **story** and all its child tasks.
+    Run `node ~/.claude/bin/devsprint-tools.cjs update-state --id {storyId} --state "Resolved" --cwd $CWD`
+    - If exit 0: Display "Story #{storyId} resolved"
+
+  - If exit 1: warn but continue (item may already be resolved or in a non-transitionable state).
 
   **Step 4f — Push and create PR:**
 
@@ -452,8 +560,16 @@ Execute Steps 4a–4h below. In `all` mode or `--headless`: if any step encounte
   ![UI Screenshot](.planning/screenshots/{storyId}.png)
   {end if}
 
+  ## How to verify
+  {Step-by-step instructions for manually verifying the changes work. Derive these from the story spec's acceptance criteria and the actual implementation. Be specific — include exact URLs, menu paths, test data, or commands to run. Example:}
+  {1. Run the application / open the page at ...}
+  {2. Navigate to ... / click ...}
+  {3. Verify that ... shows/works as expected}
+  {4. Edge case: try ... and confirm ...}
+  {Include at least 3 concrete steps. If the change is backend-only (API, migration, CLI), describe how to invoke it and what output to expect. If it's a UI change, describe what to see on screen.}
+
   ## Test plan
-  - [ ] Verify acceptance criteria from story
+  - [ ] Manual verification (see steps above)
   - [x] Automated tests passed ({testsPassed} tests)
   - [x] UI visually verified via screenshot
   - [ ] Code review
@@ -461,7 +577,11 @@ Execute Steps 4a–4h below. In `all` mode or `--headless`: if any step encounte
 
   **Note on screenshot in PR:** The screenshot is committed to the branch at `.planning/screenshots/{storyId}.png`. Azure DevOps renders images from the repo in PR descriptions using relative paths. If the image doesn't render inline, the reviewer can still find it in the branch's `.planning/screenshots/` folder.
 
-  Run: `node ~/.claude/bin/devsprint-tools.cjs create-pr --repo {repoPath} --branch {branchName} --base {baseBranch} --title "#{storyId} {storyTitle}" --body "{prBody}" --story-id {storyId} --cwd $CWD`
+  Determine PR title and linked work item:
+  - If `executionScope = "task"`: title = `"#{targetTaskId} {taskTitle}"`, link to task ID
+  - If `executionScope = "story"`: title = `"#{storyId} {storyTitle}"`, link to story ID
+
+  Run: `node ~/.claude/bin/devsprint-tools.cjs create-pr --repo {repoPath} --branch {branchName} --base {baseBranch} --title "{prTitle}" --body "{prBody}" --story-id {itemId} --cwd $CWD`
 
   - If exit 0: parse JSON. Store `pr` URL in results. PR is automatically linked to the story.
   - If exit 1:
@@ -475,14 +595,19 @@ Execute Steps 4a–4h below. In `all` mode or `--headless`: if any step encounte
   After each story completes (whether completed, partial, or skipped), immediately append the result to the execution log file at `$CWD/.planning/devsprint-execution-log.json`.
 
   1. Read the current execution log (or use the in-memory `executionLog` from Step 2.5).
-  2. Find any existing entry for this `storyId` and replace it (upsert), or append if new.
+  2. Find any existing entry to upsert:
+     - If `executionScope = "task"`: match by `taskId` (a story can have multiple task-level entries).
+     - If `executionScope = "story"`: match by `storyId` (and `taskId` is null).
   3. Write the updated log back to disk using the Write tool.
 
   Each entry contains:
   ```json
   {
     "storyId": 12345,
+    "taskId": null,
+    "executionScope": "story",
     "storyTitle": "As a user I want...",
+    "taskTitle": null,
     "status": "completed|partial|skipped",
     "branch": "feature/12345-...",
     "baseBranch": "develop",
@@ -497,7 +622,9 @@ Execute Steps 4a–4h below. In `all` mode or `--headless`: if any step encounte
   }
   ```
 
-  This ensures that if execution is interrupted mid-way through the story list, the next run picks up where it left off. The log is written after EACH story, not just at the end.
+  For task-scope execution, `taskId` and `taskTitle` are populated, and `executionScope` is `"task"`. This allows a story to have one story-level entry AND multiple task-level entries in the log (the "post-merge fix" scenario).
+
+  This ensures that if execution is interrupted mid-way through the story list, the next run picks up where it left off. The log is written after EACH item, not just at the end.
 
 **Step 5 — Summary:**
 
@@ -561,7 +688,7 @@ Next steps:
   - `single` mode: warn the user and ask for the correct path.
   - `all` mode: skip the story, record as "skipped — repo not found at {path}".
 
-- Story spec is missing but task map exists: Tell user to run `/devsprint-plan {storyId}` to regenerate.
+- Spec is missing but task map exists: Tell user to run `/devsprint-plan {itemId}` to generate it.
 
 - Git operations fail in target repo: Attempt `git stash`, retry. If still failing:
   - `single` mode: warn user with error details.
