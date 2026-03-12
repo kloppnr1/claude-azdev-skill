@@ -729,7 +729,15 @@ function stepColor(s) {
 let _lastAgentRenderKey = '';
 function renderAgent(d) {
   // Skip DOM work if nothing changed
-  const renderKey = JSON.stringify(d && d.active ? { s: d.active.storyId, step: d.active.step, detail: d.active.detail, stories: d.active.stories, updatedAt: d.active.updatedAt } : null);
+  // Only compare visible fields — exclude timestamps to avoid needless re-renders
+  var _agentVisKey = function(a) {
+    if (!a) return 'null';
+    var sk = {};
+    var st = a.stories || {};
+    for (var k in st) sk[k] = { step: st[k].step, detail: st[k].detail, storyTitle: st[k].storyTitle };
+    return JSON.stringify({ s: a.storyId, step: a.step, detail: a.detail, stories: sk });
+  };
+  const renderKey = _agentVisKey(d && d.active ? d.active : null);
   if (renderKey === _lastAgentRenderKey) return;
   _lastAgentRenderKey = renderKey;
 
@@ -1597,7 +1605,10 @@ function updateStoryAgent(d) {
   // Skip DOM work if nothing changed
   const a = d && d.active;
   const storyMap = a && a.stories ? a.stories : {};
-  const saKey = JSON.stringify({ ids: Object.keys(storyMap), sid: a ? a.storyId : null, step: a ? a.step : null, stories: storyMap });
+  // Only compare step/detail per story — exclude timestamps to avoid needless re-renders
+  var _storyVisMap = {};
+  for (var _k in storyMap) _storyVisMap[_k] = { step: storyMap[_k].step, detail: storyMap[_k].detail };
+  const saKey = JSON.stringify({ ids: Object.keys(storyMap), sid: a ? a.storyId : null, step: a ? a.step : null, stories: _storyVisMap });
   if (saKey === _lastStoryAgentKey) return;
   _lastStoryAgentKey = saKey;
 
@@ -1741,7 +1752,15 @@ refreshAll();
 let _lastAgentKey = '';
 let _wasActive = false;
 setInterval(() => F('/api/agent-status').then(d => {
-  const aKey = JSON.stringify(d);
+  // Build a key that only includes visible/structural data, not timestamps
+  var _pollVisKey = function(d) {
+    if (!d || !d.active) return 'null';
+    var a = d.active, sk = {};
+    var st = a.stories || {};
+    for (var k in st) sk[k] = { step: st[k].step, detail: st[k].detail };
+    return JSON.stringify({ s: a.storyId, step: a.step, detail: a.detail, stories: sk, hLen: (d.history || []).length });
+  };
+  const aKey = _pollVisKey(d);
   const changed = aKey !== _lastAgentKey;
   _lastAgentKey = aKey;
   const isActive = !!(d && d.active);
