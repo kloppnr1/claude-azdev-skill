@@ -666,7 +666,7 @@ Execution log: .planning/devsprint-execution-log.json
 ```
 
 **Clear agent dashboard status** after the summary is displayed:
-Run `node ~/.claude/bin/devsprint-tools.cjs clear-status --cwd $CWD` to mark the agent as idle in the dashboard.
+Run `node ~/.claude/bin/devsprint-tools.cjs clear-status --story-id {storyId} --cwd $CWD` to mark this story as idle in the dashboard (without affecting other running stories).
 
 ```
 Next steps:

@@ -880,7 +880,7 @@ Task planned:
 
 **Step 12.5 — Clear dashboard status and clean up:**
 
-Run `node ~/.claude/bin/devsprint-tools.cjs clear-status --cwd $CWD` to mark the agent as idle.
+Run `node ~/.claude/bin/devsprint-tools.cjs clear-status --story-id {storyId} --cwd $CWD` to mark this story as idle (without affecting other running stories). If processing multiple stories, call this for each story individually.
 
 If `headless = true`: clean up any leftover question/answer files for processed stories:
 ```bash

@@ -274,19 +274,31 @@ function seedAgentStatus(storyId, step, detail) {
   try { if (fs.existsSync(statusPath)) existing = JSON.parse(fs.readFileSync(statusPath, 'utf-8')); } catch {}
   const now = new Date().toISOString();
   const sid = parseInt(storyId, 10);
-  existing.active = {
+  // Preserve existing active structure — only add/update this story
+  if (!existing.active) {
+    existing.active = { stories: {}, stepLog: [] };
+  }
+  const existingStories = existing.active.stories || {};
+  existingStories[String(sid)] = {
     storyId: sid,
     storyTitle: null,
     step,
     detail,
-    repo: null,
-    branch: null,
     command: null,
     startedAt: now,
     updatedAt: now,
-    stories: { [String(sid)]: { storyId: sid, storyTitle: null, step, detail, updatedAt: now } },
     stepLog: [{ step, detail, at: now, storyId: sid }],
   };
+  existing.active.stories = existingStories;
+  // Update top-level summary (last writer wins — used by global agent widget)
+  existing.active.storyId = sid;
+  existing.active.step = step;
+  existing.active.detail = detail;
+  existing.active.updatedAt = now;
+  if (!existing.active.startedAt) existing.active.startedAt = now;
+  // Append to global stepLog
+  if (!existing.active.stepLog) existing.active.stepLog = [];
+  existing.active.stepLog.push({ step, detail, at: now, storyId: sid });
   fs.writeFileSync(statusPath, JSON.stringify(existing, null, 2), 'utf-8');
 }
 

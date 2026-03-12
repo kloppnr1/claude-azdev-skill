@@ -61,7 +61,7 @@ Report progress to the dashboard at EVERY major step by running:
 Steps to report: "Finding PR", "Fetching comments", "Checking out branch", "Running baseline tests", "Implementing fix", "Running tests", "Pushing fixes", "Done"
 
 At the end (success or failure), clear status:
-`node ~/.claude/bin/devsprint-tools.cjs clear-status --cwd $CWD`
+`node ~/.claude/bin/devsprint-tools.cjs clear-status --story-id {storyId} --cwd $CWD`
 </dashboard_status>
 
 <process>

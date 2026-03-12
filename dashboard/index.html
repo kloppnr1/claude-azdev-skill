@@ -1638,7 +1638,7 @@ function updateStoryAgent(d) {
       el.style.display = '';
       // Build a live run row reusing buildHistRow
       content.innerHTML = '';
-      var liveData = { startedAt: a.startedAt, step: ss ? ss.step : a.step, stepLog: a.stepLog || [], command: a.command || null };
+      var liveData = { startedAt: ss && ss.startedAt ? ss.startedAt : a.startedAt, step: ss ? ss.step : a.step, stepLog: ss && ss.stepLog ? ss.stepLog : (a.stepLog || []), command: ss && ss.command ? ss.command : (a.command || null) };
       var liveRow = buildHistRow(liveData, sid, true);
       liveRow.classList.add('hist-live');
       content.appendChild(liveRow);

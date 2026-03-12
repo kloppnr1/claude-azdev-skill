@@ -1253,16 +1253,24 @@ function cmdReportStatus(cwd, args) {
     status.stepLog.push({ step: newStep, detail: get('--detail') || null, at: now, storyId: storyId ? parseInt(storyId, 10) : null });
   }
 
-  // If story-id is provided, upsert into per-story map
+  // If story-id is provided, upsert into per-story map with its own stepLog
   if (storyId) {
     const sid = String(storyId);
     const prev = status.stories[sid];
+    const storyStepLog = prev && prev.stepLog ? [...prev.stepLog] : [];
+    const lastStoryLog = storyStepLog.length ? storyStepLog[storyStepLog.length - 1] : null;
+    if (!lastStoryLog || lastStoryLog.step !== newStep) {
+      storyStepLog.push({ step: newStep, detail: get('--detail') || null, at: now, storyId: parseInt(storyId, 10) });
+    }
     status.stories[sid] = {
       storyId: parseInt(storyId, 10),
       storyTitle: get('--story-title') || (prev ? prev.storyTitle : null),
       step: get('--step') || 'unknown',
       detail: get('--detail') || null,
+      command: get('--command') || (prev ? prev.command : null),
+      startedAt: prev ? prev.startedAt : now,
       updatedAt: now,
+      stepLog: storyStepLog,
     };
   }
 
@@ -1274,30 +1282,72 @@ function cmdReportStatus(cwd, args) {
 
 /**
  * Handles the clear-status command.
- * Archives the current active status and clears it.
+ * With --story-id: archives only that story and removes it from active.
+ * Without --story-id: archives all active stories and clears everything.
  * @param {string} cwd - Working directory
+ * @param {string[]} args - CLI args (optional --story-id)
  */
-function cmdClearStatus(cwd) {
+function cmdClearStatus(cwd, args) {
+  const get = (name) => { const i = (args || []).indexOf(name); return i !== -1 && args[i + 1] ? args[i + 1] : null; };
   const statusPath = path.join(cwd, '.planning', 'devsprint-agent-status.json');
   let existing = { active: null, history: [] };
   try {
     if (fs.existsSync(statusPath)) existing = JSON.parse(fs.readFileSync(statusPath, 'utf-8'));
   } catch {}
 
-  if (existing.active) {
-    const archived = { ...existing.active, endedAt: new Date().toISOString() };
-    // Mark as Done so dashboard knows this run completed successfully
-    archived.step = 'Done';
-    if (archived.stepLog) {
-      const lastLog = archived.stepLog.length ? archived.stepLog[archived.stepLog.length - 1] : null;
-      if (!lastLog || lastLog.step !== 'Done') {
-        archived.stepLog.push({ step: 'Done', detail: null, at: new Date().toISOString(), storyId: archived.storyId || null });
+  const targetStoryId = get('--story-id');
+  const now = new Date().toISOString();
+
+  if (targetStoryId && existing.active && existing.active.stories) {
+    // Per-story clear: archive only this story, keep others running
+    const sid = String(targetStoryId);
+    const storyData = existing.active.stories[sid];
+    if (storyData) {
+      const archived = { ...storyData, endedAt: now, step: 'Done' };
+      if (archived.stepLog) {
+        const lastLog = archived.stepLog.length ? archived.stepLog[archived.stepLog.length - 1] : null;
+        if (!lastLog || lastLog.step !== 'Done') {
+          archived.stepLog.push({ step: 'Done', detail: null, at: now, storyId: parseInt(targetStoryId, 10) });
+        }
       }
+      if (!existing.history) existing.history = [];
+      existing.history.unshift(archived);
+      if (existing.history.length > 50) existing.history = existing.history.slice(0, 50);
+      delete existing.active.stories[sid];
     }
-    existing.history.unshift(archived);
+    // If no stories left, clear active entirely
+    if (Object.keys(existing.active.stories).length === 0) {
+      existing.active = null;
+    }
+  } else if (existing.active) {
+    // Full clear: archive each story individually, then clear active
+    const stories = existing.active.stories || {};
+    for (const sid of Object.keys(stories)) {
+      const storyData = stories[sid];
+      const archived = { ...storyData, endedAt: now, step: 'Done' };
+      if (archived.stepLog) {
+        const lastLog = archived.stepLog.length ? archived.stepLog[archived.stepLog.length - 1] : null;
+        if (!lastLog || lastLog.step !== 'Done') {
+          archived.stepLog.push({ step: 'Done', detail: null, at: now, storyId: storyData.storyId || null });
+        }
+      }
+      if (!existing.history) existing.history = [];
+      existing.history.unshift(archived);
+    }
+    // If no per-story data, archive the top-level as fallback (backward compat)
+    if (Object.keys(stories).length === 0) {
+      const archived = { ...existing.active, endedAt: now, step: 'Done' };
+      if (archived.stepLog) {
+        const lastLog = archived.stepLog.length ? archived.stepLog[archived.stepLog.length - 1] : null;
+        if (!lastLog || lastLog.step !== 'Done') {
+          archived.stepLog.push({ step: 'Done', detail: null, at: now, storyId: archived.storyId || null });
+        }
+      }
+      existing.history.unshift(archived);
+    }
     if (existing.history.length > 50) existing.history = existing.history.slice(0, 50);
+    existing.active = null;
   }
-  existing.active = null;
   fs.writeFileSync(statusPath, JSON.stringify(existing, null, 2), 'utf-8');
   console.log(JSON.stringify({ status: 'cleared' }));
   process.exit(0);
@@ -3070,7 +3120,7 @@ async function main() {
       break;
 
     case 'clear-status':
-      cmdClearStatus(cwd);
+      cmdClearStatus(cwd, cmdArgs);
       break;
 
     case 'download-attachment':
