@@ -339,7 +339,7 @@ Launch an Agent with the full execution instructions for this single story (Step
 - Instruction to run the FULL test suite (`dotnet test` / `npm test` / `pytest`) after all implementation — not just new tests. All tests must pass before resolving the story.
 - Instruction to return a JSON summary: `{"storyId": N, "taskId": N|null, "executionScope": "story|task", "status": "completed|partial|skipped", "branch": "...", "prUrl": "...", "testsPassed": N, "testsFailed": N, "testCommand": "...", "testSuiteStatus": "all passed|failures|no test infrastructure", "uiVerified": true|false, "screenshotPath": ".planning/screenshots/{itemId}.png"|null, "error": "..."}`
 - **Dashboard status reporting** — the agent MUST report its progress to the dashboard at each major step by running:
-  `node ~/.claude/bin/devsprint-tools.cjs report-status --story-id {storyId} --story-title "{storyTitle}" --step "<step>" --detail "<detail>" --repo "{repoName}" --cwd $CWD`
+  `node ~/.claude/bin/devsprint-tools.cjs report-status --command execute --story-id {storyId} --story-title "{storyTitle}" --step "<step>" --detail "<detail>" --repo "{repoName}" --cwd $CWD`
   Report status at these points:
   - Step 4a: `--step "Checking story state" --detail "Fetching story state from Azure DevOps"`
   - Step 4b: `--step "Loading story spec" --detail "Reading {storyId}.md"`

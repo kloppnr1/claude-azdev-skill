@@ -1239,7 +1239,7 @@ function cmdReportStatus(cwd, args) {
     detail: get('--detail') || null,
     repo: get('--repo') || (existing.active ? existing.active.repo : null),
     branch: get('--branch') || (existing.active ? existing.active.branch : null),
-    command: get('--command') || null,
+    command: get('--command') || (existing.active ? existing.active.command : null),
     startedAt: existing.active ? existing.active.startedAt : now,
     updatedAt: now,
     // Preserve per-story tracking map from previous state

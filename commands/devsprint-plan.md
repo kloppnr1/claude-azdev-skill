@@ -189,7 +189,7 @@ If the agent status has no `active` entry, or the target story is not in it, pro
 **Step 1.5 — Dashboard status reporting (applies to ALL steps):**
 
 Report status to the dashboard at EVERY major step by running:
-`node ~/.claude/bin/devsprint-tools.cjs report-status --step "{step}" --detail "{detail}" --cwd $CWD`
+`node ~/.claude/bin/devsprint-tools.cjs report-status --command plan --step "{step}" --detail "{detail}" --cwd $CWD`
 
 If a story is being processed, always include: `--story-id {storyId} --story-title "{storyTitle}"`
 
@@ -213,7 +213,7 @@ Report at these points:
 When you launch sub-agents (e.g., for parallel repo analysis or spec generation), EACH agent's prompt MUST include the `report-status` command and instructions to call it at key points. Include this in every agent prompt:
 ```
 DASHBOARD STATUS: Report your progress by running this command at each major step:
-  node ~/.claude/bin/devsprint-tools.cjs report-status --story-id {storyId} --story-title "{storyTitle}" --step "<step>" --detail "<detail>" --cwd {$CWD}
+  node ~/.claude/bin/devsprint-tools.cjs report-status --command plan --story-id {storyId} --story-title "{storyTitle}" --step "<step>" --detail "<detail>" --cwd {$CWD}
 
 Report at these points:
   - Starting analysis: --step "Analyzing repo" --detail "Scanning {repoName} for #{storyId}"

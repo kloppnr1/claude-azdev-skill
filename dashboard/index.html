@@ -1108,8 +1108,10 @@ const STEP_COLORS = {
   'st-work':'#7c3aed','st-error':'#dc2626'
 };
 function buildHistRow(h, forStoryId, isLive) {
-  const isPlan = isPlanStep(h.step) || (h.stepLog && h.stepLog.some(function(e) { return isPlanStep(e.step); }));
-  const isPrFix = !isPlan && (isPrFixStep(h.step) || (h.stepLog && h.stepLog.some(function(e) { return isPrFixStep(e.step); })));
+  // Use explicit command field if available, otherwise fall back to step-name heuristics
+  var hasCmd = h.command && typeof h.command === 'string';
+  const isPlan = hasCmd ? h.command === 'plan' : (isPlanStep(h.step) || (h.stepLog && h.stepLog.some(function(e) { return isPlanStep(e.step); })));
+  const isPrFix = hasCmd ? h.command === 'pr-fix' : (!isPlan && (isPrFixStep(h.step) || (h.stepLog && h.stepLog.some(function(e) { return isPrFixStep(e.step); }))));
   const typeLabel = isPlan ? 'PLAN' : isPrFix ? 'PR' : 'EXEC';
   const typeCls = isPlan ? 'ht-plan' : isPrFix ? 'ht-prfix' : 'ht-exec';
   const r = cel('div', 'hist-row');
@@ -1636,7 +1638,7 @@ function updateStoryAgent(d) {
       el.style.display = '';
       // Build a live run row reusing buildHistRow
       content.innerHTML = '';
-      var liveData = { startedAt: a.startedAt, step: ss ? ss.step : a.step, stepLog: a.stepLog || [] };
+      var liveData = { startedAt: a.startedAt, step: ss ? ss.step : a.step, stepLog: a.stepLog || [], command: a.command || null };
       var liveRow = buildHistRow(liveData, sid, true);
       liveRow.classList.add('hist-live');
       content.appendChild(liveRow);
