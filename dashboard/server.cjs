@@ -317,8 +317,8 @@ async function callGithubTool(toolName, toolArgs) {
   let parsed;
   const body = res.body.trim();
 
-  if (body.startsWith('data:')) {
-    // SSE format: extract last data line
+  if (body.includes('data:')) {
+    // SSE format: extract last data line (may have "event: message" lines too)
     const dataLines = body.split('\n').filter(l => l.startsWith('data:')).map(l => l.slice(5).trim());
     const lastData = dataLines[dataLines.length - 1];
     try { parsed = JSON.parse(lastData); } catch { throw new Error(`GitHub MCP SSE parse error: ${lastData}`); }
@@ -500,36 +500,14 @@ async function fetchSprintDataAzdo(cfg) {
   };
 }
 
-// GitHub sprint data via MCP
-// Convention: milestones = sprints, issues with milestone = sprint items
+// GitHub sprint data via MCP — show all repo issues
 async function fetchSprintDataGithub(cfg) {
   const owner = cfg.githubOwner;
   const repo = cfg.githubRepo;
-  const assignee = cfg.githubAssignee;
-
-  // 1. List milestones to find the active one (first open milestone)
-  let milestones;
-  try {
-    milestones = await callGithubTool('list_milestones', { owner, repo, state: 'open' });
-  } catch (err) {
-    throw new Error(`Failed to list GitHub milestones: ${err.message}`);
-  }
-
-  const milestoneList = Array.isArray(milestones) ? milestones : (milestones && milestones.milestones ? milestones.milestones : []);
-  if (milestoneList.length === 0) {
-    return { sprint: { name: 'No active milestone', path: '', startDate: null, finishDate: null }, items: [] };
-  }
-
-  // Use first open milestone as current "sprint"
-  const milestone = milestoneList[0];
-
-  // 2. List issues in the milestone
-  const issueParams = { owner, repo, milestone: String(milestone.number), state: 'all' };
-  if (assignee) issueParams.assignee = assignee;
 
   let issues;
   try {
-    issues = await callGithubTool('list_issues', issueParams);
+    issues = await callGithubTool('list_issues', { owner, repo, perPage: 100 });
   } catch (err) {
     throw new Error(`Failed to list GitHub issues: ${err.message}`);
   }
@@ -540,21 +518,21 @@ async function fetchSprintDataGithub(cfg) {
     id: issue.number,
     type: issue.pull_request ? 'Pull Request' : 'Issue',
     title: issue.title || '',
-    state: issue.state === 'open' ? 'Active' : 'Closed',
+    state: issue.state === 'OPEN' || issue.state === 'open' ? 'Active' : 'Closed',
     description: issue.body || '',
     parentId: null,
-    assignedTo: issue.assignee ? issue.assignee.login : (issue.assignees && issue.assignees[0] ? issue.assignees[0].login : null),
+    assignedTo: issue.user ? issue.user.login : null,
     tags: (issue.labels || []).map(l => typeof l === 'string' ? l : l.name),
-    changedDate: issue.updated_at || null,
-    createdDate: issue.created_at || null,
+    changedDate: issue.updated_at || issue.updatedAt || null,
+    createdDate: issue.created_at || issue.createdAt || null,
   }));
 
   return {
     sprint: {
-      name: milestone.title,
-      path: `${owner}/${repo}#${milestone.number}`,
-      startDate: milestone.created_at || null,
-      finishDate: milestone.due_on || null,
+      name: `${owner}/${repo}`,
+      path: `${owner}/${repo}`,
+      startDate: null,
+      finishDate: null,
     },
     items,
   };

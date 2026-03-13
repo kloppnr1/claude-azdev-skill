@@ -1598,7 +1598,7 @@ function renderMain() {
   }
 
   const itemIds = new Set(sp.items.map(i => i.id));
-  const stories = sp.items.filter(i => (i.type === 'User Story') || (i.type === 'Bug' && (!i.parentId || !itemIds.has(i.parentId))));
+  const stories = sp.items.filter(i => (i.type === 'User Story') || (i.type === 'Issue') || (i.type === 'Bug' && (!i.parentId || !itemIds.has(i.parentId))));
   const exM = {}; if (S.exec && S.exec.executions) for (const x of S.exec.executions) exM[x.storyId] = x;
   const prM = {}; for (const p of S.pr) prM[p.storyId] = p;
   const gitM = {}; for (const r of S.git) gitM[r.repoName] = r;
@@ -1610,7 +1610,7 @@ function renderMain() {
 
   document.getElementById('s-stories').textContent = stories.length;
   document.getElementById('s-done').textContent = stories.filter(isDone).length;
-  document.getElementById('s-prs').textContent = S.pr.filter(p => p.prStatus === 'active').length;
+  document.getElementById('s-prs').textContent = S.pr.filter(p => p.prStatus === 'active' || p.prStatus === 'open').length;
   document.getElementById('s-repos').textContent = allR.size;
   document.getElementById('s-commits').textContent = S.git.reduce((n, r) => n + (r.commits ? r.commits.length : 0), 0);
 
