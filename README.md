@@ -11,7 +11,7 @@ Point it at your sprint, and it will read your stories, analyze the relevant rep
 | **Work items** | Work Items (User Story, Task, Bug) | Issues (with labels) |
 | **Sprints** | Iterations | Milestones |
 | **PRs** | Azure DevOps Pull Requests | GitHub Pull Requests |
-| **Auth** | PAT (stored in config) | OAuth (browser login) |
+| **Auth** | OAuth (browser login) | OAuth (browser login) |
 | **Parent linking** | `System.Parent` field | "Parent: #N" in issue body |
 
 ### Quick switch between providers
@@ -289,7 +289,8 @@ Stories now appear in the dashboard under **Awaiting verification**. Review the 
 
 **Azure DevOps:**
 - MCP server registered automatically by `/devsprint-setup azdo`
-- PAT with scopes: Work Items (Read & Write), Code (Read & Write), Pull Requests (Read & Write)
+- OAuth browser login on first use — no token stored locally
+- Optionally a PAT for the standalone dashboard (it can't use MCP)
 
 **Requirements for stories to appear:**
 
@@ -321,8 +322,8 @@ Both configs are stored side-by-side in `.planning/devsprint-config.json`. Switc
 
 This:
 1. Registers the appropriate MCP server in `.mcp.json`
-2. For GitHub: opens a browser window for **OAuth login** — no token stored locally
-3. For Azure DevOps: prompts for a PAT and optionally configures it for the standalone web dashboard
+2. On first use, opens a browser window for **OAuth login** — both providers use OAuth
+3. Optionally configures a PAT for the standalone web dashboard (it can't use MCP)
 
 ### Verify connection
 
@@ -330,7 +331,7 @@ This:
 /devsprint-test
 ```
 
-Tests the MCP connection and optionally verifies the dashboard PAT.
+Tests the MCP connection. Also verifies the dashboard PAT if one is configured.
 
 ## Architecture
 
@@ -444,7 +445,7 @@ It also queries your configured provider (GitHub or Azure DevOps) for live sprin
 
 ### `/devsprint-setup [github|azdo]`
 
-Registers the appropriate MCP server for the chosen provider and configures credentials. For GitHub, a browser window opens for OAuth login — no token stored locally. For Azure DevOps, prompts for a PAT and optionally configures it for the dashboard. Both provider configs are stored side-by-side; switching only changes the active `provider` field.
+Registers the appropriate MCP server for the chosen provider. Both providers use OAuth (browser login on first use). Optionally configures a PAT for the standalone dashboard. Both provider configs are stored side-by-side; switching only changes the active `provider` field.
 
 ### `/devsprint-test`
 
@@ -511,9 +512,8 @@ claude-devsprint-plugin/
 
 ## Security
 
-- GitHub uses OAuth via MCP server — no token stored locally
-- Azure DevOps MCP server uses OAuth — credentials are managed by the browser login flow
-- Dashboard PAT is stored base64-encoded in `.planning/devsprint-config.json` — this is light obfuscation, not encryption
+- Both providers use OAuth via their MCP servers — no tokens stored locally
+- Optional dashboard PAT is stored base64-encoded in `.planning/devsprint-config.json` — light obfuscation, not encryption
 - Always add `devsprint-config.json` to `.gitignore` — the setup command checks for this
 - The local helper script uses only Node.js built-in modules (`fs`, `path`, `child_process`, `zlib`)
 
