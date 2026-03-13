@@ -387,7 +387,7 @@ async function fetchSprintDataAzdo(cfg) {
   // 1. Get current iteration
   let iterations;
   try {
-    iterations = await callAzdoTool('ado_work_list_team_iterations', {
+    iterations = await callAzdoTool('work_list_team_iterations', {
       project,
       team,
       timeframe: 'current',
@@ -400,10 +400,10 @@ async function fetchSprintDataAzdo(cfg) {
   if (iterList.length === 0) throw new Error('No active sprint');
   const iteration = iterList[0];
 
-  // 2. Get work items for the iteration
-  let iterItems;
+  // 2. Get work item relations for the iteration (returns IDs + hierarchy, not full items)
+  let iterRelations;
   try {
-    iterItems = await callAzdoTool('ado_wit_get_work_items_for_iteration', {
+    iterRelations = await callAzdoTool('wit_get_work_items_for_iteration', {
       project,
       team,
       iterationId: iteration.id || iteration.path,
@@ -412,23 +412,57 @@ async function fetchSprintDataAzdo(cfg) {
     throw new Error(`Failed to get iteration work items: ${err.message}`);
   }
 
-  // 3. Also get "my work items" to scope to current user
+  // Extract unique work item IDs from relations
+  const relations = iterRelations && iterRelations.workItemRelations ? iterRelations.workItemRelations : (Array.isArray(iterRelations) ? iterRelations : []);
+  const idSet = new Set();
+  for (const rel of relations) {
+    if (rel.target && rel.target.id) idSet.add(rel.target.id);
+    if (rel.source && rel.source.id) idSet.add(rel.source.id);
+  }
+  const allIds = [...idSet];
+
+  if (allIds.length === 0) {
+    return { sprint: { name: iteration.name, path: iteration.path, startDate: iteration.attributes?.startDate || null, finishDate: iteration.attributes?.finishDate || null }, items: [] };
+  }
+
+  // 3. Fetch full work item details in batches (API limit ~200)
+  const BATCH_SIZE = 200;
+  let fullItems = [];
+  for (let i = 0; i < allIds.length; i += BATCH_SIZE) {
+    const batch = allIds.slice(i, i + BATCH_SIZE);
+    try {
+      const batchResult = await callAzdoTool('wit_get_work_items_batch_by_ids', {
+        ids: batch,
+        project,
+      });
+      const items = Array.isArray(batchResult) ? batchResult : (batchResult && batchResult.value ? batchResult.value : []);
+      fullItems = fullItems.concat(items);
+    } catch (err) {
+      console.error(`[sprint] Failed to fetch batch: ${err.message}`);
+    }
+  }
+
+  // Build parent map from hierarchy relations
+  const parentMap = {};
+  for (const rel of relations) {
+    if (rel.rel === 'System.LinkTypes.Hierarchy-Forward' && rel.source && rel.target) {
+      parentMap[rel.target.id] = rel.source.id;
+    }
+  }
+
+  // 4. Also get "my work items" to scope to current user
   let myItems = [];
   try {
-    myItems = await callAzdoTool('ado_wit_my_work_items', {});
+    const myResult = await callAzdoTool('wit_my_work_items', { project, includeCompleted: true, top: 200 });
+    // Response format: { results: [{ id }, ...] } or array
+    myItems = Array.isArray(myResult) ? myResult :
+      (myResult && myResult.results ? myResult.results :
+      (myResult && myResult.value ? myResult.value : []));
   } catch { /* optional — proceed with all items */ }
 
-  const myItemIds = new Set(
-    Array.isArray(myItems) ? myItems.map(i => i.id || i.workItemId) :
-    (myItems && myItems.value ? myItems.value.map(i => i.id || i.workItemId) : [])
-  );
+  const myItemIds = new Set(myItems.map(i => i.id || i.workItemId).filter(Boolean));
 
-  // Normalize the iteration items
-  const rawItems = Array.isArray(iterItems) ? iterItems :
-    (iterItems && iterItems.workItems ? iterItems.workItems :
-    (iterItems && iterItems.value ? iterItems.value : []));
-
-  const allItems = rawItems.map((item) => {
+  const allItems = fullItems.map((item) => {
     const fields = item.fields || item;
     const assignedTo = fields['System.AssignedTo'] || fields.assignedTo;
     return {
@@ -437,7 +471,7 @@ async function fetchSprintDataAzdo(cfg) {
       title: fields['System.Title'] || fields.title || '',
       state: fields['System.State'] || fields.state || '',
       description: stripHtml(fields['System.Description'] || fields.description || ''),
-      parentId: fields['System.Parent'] || fields.parentId || null,
+      parentId: parentMap[item.id] || fields['System.Parent'] || fields.parentId || null,
       assignedTo: typeof assignedTo === 'object' ? assignedTo?.displayName : assignedTo || null,
       tags: fields['System.Tags'] ? fields['System.Tags'].split('; ') : [],
       changedDate: fields['System.ChangedDate'] || fields.changedDate || null,
@@ -558,7 +592,7 @@ async function fetchPRStatusAzdo(cfg) {
 
     try {
       if (!repoPrCache[repoName]) {
-        repoPrCache[repoName] = await callAzdoTool('ado_repo_list_pull_requests_by_repo_or_project', {
+        repoPrCache[repoName] = await callAzdoTool('repo_list_pull_requests_by_repo_or_project', {
           project,
           repositoryId: repoName,
           status: 'all',
@@ -645,7 +679,7 @@ async function closeStory(storyId) {
 }
 
 async function closeStoryAzdo(cfg, storyId) {
-  const result = await callAzdoTool('ado_wit_update_work_item', {
+  const result = await callAzdoTool('wit_update_work_item', {
     id: Number(storyId),
     patch: [{ op: 'add', path: '/fields/System.State', value: 'Closed' }],
   });

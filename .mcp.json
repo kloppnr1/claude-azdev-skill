@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "azure-devops": {
-      "command": "npx",
-      "args": ["-y", "@azure-devops/mcp", "verdo365"]
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "@azure-devops/mcp", "verdo365"]
     },
     "github": {
       "type": "url",
