@@ -3,6 +3,10 @@
     "azure-devops": {
       "command": "npx",
       "args": ["-y", "@azure-devops/mcp", "verdo365"]
+    },
+    "github": {
+      "type": "url",
+      "url": "https://api.githubcopilot.com/mcp/"
     }
   }
 }
